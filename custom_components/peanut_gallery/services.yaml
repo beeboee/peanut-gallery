@@ -1,0 +1,23 @@
+today:
+  name: Show today's comic
+  description: Download and display today's Peanuts comic.
+
+random:
+  name: Show random comic
+  description: Display a random cached Peanuts comic and refill the random queue.
+
+refill:
+  name: Refill random cache
+  description: Refill the random comic queue.
+
+date:
+  name: Show comic by date
+  description: Download and display a Peanuts comic for a specific date.
+  fields:
+    date:
+      name: Date
+      description: Comic date in YYYY-MM-DD format.
+      required: true
+      example: "1997-10-22"
+      selector:
+        date:
