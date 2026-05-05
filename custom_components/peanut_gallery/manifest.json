@@ -1,0 +1,12 @@
+{
+  "domain": "peanut_gallery",
+  "name": "Peanut Gallery",
+  "codeowners": ["@beeboee"],
+  "config_flow": false,
+  "dependencies": [],
+  "documentation": "https://github.com/beeboee/peanut-gallery",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/beeboee/peanut-gallery/issues",
+  "requirements": ["beautifulsoup4==4.12.3"],
+  "version": "0.1.0"
+}
