@@ -231,28 +231,20 @@ custom_fields:
       const now = new Date();
       const localToday = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
       const dateValue = currentDate || localToday;
-      const pickerId = `peanut-gallery-date-${Math.random().toString(36).slice(2)}`;
-
-      setTimeout(() => {
-        const root = this.shadowRoot || this;
-        const picker = root.querySelector(`#${pickerId}`);
-        if (!picker || picker.dataset.peanutGalleryBound === 'true') return;
-
-        picker.dataset.peanutGalleryBound = 'true';
-        picker.addEventListener('click', (event) => event.stopPropagation());
-        picker.addEventListener('change', (event) => {
-          event.stopPropagation();
-          const date = event.target.value;
-          if (!date) return;
-          hass.callService('peanut_gallery', 'date', { date });
-        });
-      }, 0);
 
       return `
         <style>
-          .peanut-gallery-menu {
-            position: relative;
-            outline: none;
+          .peanut-gallery-menu summary::-webkit-details-marker {
+            display: none;
+          }
+          .peanut-gallery-menu[open] summary {
+            display: none;
+          }
+          .peanut-gallery-panel {
+            display: flex;
+            flex-direction: column-reverse;
+            align-items: flex-end;
+            gap: 8px;
           }
           .peanut-gallery-trigger,
           .peanut-gallery-action {
@@ -271,18 +263,8 @@ custom_fields:
           }
           .peanut-gallery-trigger {
             width: 42px;
-          }
-          .peanut-gallery-panel {
-            display: none;
-            flex-direction: column-reverse;
-            align-items: flex-end;
-            gap: 8px;
-          }
-          .peanut-gallery-menu:focus-within .peanut-gallery-trigger {
-            display: none;
-          }
-          .peanut-gallery-menu:focus-within .peanut-gallery-panel {
-            display: flex;
+            list-style: none;
+            cursor: pointer;
           }
           .peanut-gallery-time-machine {
             position: relative;
@@ -302,10 +284,10 @@ custom_fields:
             cursor: pointer;
           }
         </style>
-        <div class="peanut-gallery-menu" tabindex="0" aria-label="Comic actions">
-          <div class="peanut-gallery-trigger">
+        <details class="peanut-gallery-menu" onclick="event.stopPropagation();">
+          <summary class="peanut-gallery-trigger" aria-label="Comic actions">
             <ha-icon icon="mdi:dots-horizontal" style="--mdc-icon-size: 24px;"></ha-icon>
-          </div>
+          </summary>
           <div class="peanut-gallery-panel">
             <a
               class="peanut-gallery-action"
@@ -321,16 +303,17 @@ custom_fields:
               <ha-icon icon="mdi:calendar-search" style="--mdc-icon-size: 20px;"></ha-icon>
               <span>Time machine</span>
               <input
-                id="${pickerId}"
                 class="peanut-gallery-date-input"
                 type="date"
                 min="${startDate}"
                 max="${localToday}"
                 value="${dateValue}"
+                onclick="event.stopPropagation();"
+                onchange="event.stopPropagation(); const date = this.value; if (date) document.querySelector('home-assistant').hass.callService('peanut_gallery', 'date', { date });"
               />
             </label>
           </div>
-        </div>
+        </details>
       `;
     ]]]
 tap_action:
