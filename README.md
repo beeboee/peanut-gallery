@@ -96,6 +96,8 @@ The image URL sensor points to the current saved comic image. By default that im
 
 ## Example dashboard card
 
+This card keeps the controls pinned to the visible comic window, not the comic image itself. The comic can be horizontally scrolled while the home, shuffle, and download buttons stay visible.
+
 ```yaml
 type: custom:button-card
 entity: sensor.peanut_gallery_image_url
@@ -110,58 +112,143 @@ styles:
     - border-radius: 6px
     - overflow: hidden
     - width: 100%
+    - position: relative
   grid:
-    - grid-template-areas: '"comic" "date"'
+    - grid-template-areas: '"comic"'
     - grid-template-columns: 1fr
-    - grid-template-rows: 1fr auto
+    - grid-template-rows: 1fr
   custom_fields:
     comic:
       - width: 100%
-    date:
-      - padding: 6px
-      - font-size: 13px
+      - min-width: 0
+    home:
+      - position: absolute
+      - top: 8px
+      - left: 8px
+      - z-index: 5
+    shuffle:
+      - position: absolute
+      - top: 8px
+      - right: 8px
+      - z-index: 5
+    download:
+      - position: absolute
+      - right: 8px
+      - bottom: 8px
+      - z-index: 5
 custom_fields:
   comic: |
     [[[
       const src = states['sensor.peanut_gallery_image_url']?.state || '/local/peanut_gallery/peanuts.jpg';
+      const date = states['sensor.peanut_gallery_date']?.state || '';
+
       return `
-        <div style="
-          width: 100%;
-          overflow-x: auto;
-          overflow-y: hidden;
-          -webkit-overflow-scrolling: touch;
-          scrollbar-width: thin;
-        ">
-          <img
-            src="${src}"
-            style="
-              display: block;
-              height: auto;
-              width: 100%;
-              max-width: none;
-            "
-            onload="
-              const ratio = this.naturalWidth / this.naturalHeight;
-              this.style.width = ratio > 2.2 ? '280%' : '100%';
-            "
-          />
+        <div style="position: relative; width: 100%;">
+          <div style="
+            width: 100%;
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+          ">
+            <img
+              src="${src}"
+              style="
+                display: block;
+                height: auto;
+                width: 100%;
+                max-width: none;
+              "
+              onload="
+                const ratio = this.naturalWidth / this.naturalHeight;
+                this.style.width = ratio > 2.2 ? '280%' : '100%';
+              "
+            />
+          </div>
+          <div style="
+            position: absolute;
+            left: 8px;
+            bottom: 8px;
+            z-index: 4;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(0, 0, 0, 0.55);
+            color: white;
+            font-size: 13px;
+            line-height: 1;
+            pointer-events: none;
+          ">${date}</div>
         </div>
       `;
     ]]]
-  date: |
+  home:
+    card:
+      type: custom:button-card
+      icon: mdi:home-variant-outline
+      show_name: false
+      tap_action:
+        action: navigate
+        navigation_path: /dashboard-home/0
+      styles:
+        card:
+          - width: 42px
+          - height: 42px
+          - border-radius: 999px
+          - background: rgba(0, 0, 0, 0.55)
+          - box-shadow: none
+          - backdrop-filter: blur(4px)
+        icon:
+          - color: white
+          - width: 24px
+  shuffle:
+    card:
+      type: custom:button-card
+      icon: mdi:shuffle-variant
+      show_name: false
+      tap_action:
+        action: perform-action
+        perform_action: peanut_gallery.random
+      styles:
+        card:
+          - width: 42px
+          - height: 42px
+          - border-radius: 999px
+          - background: rgba(0, 0, 0, 0.55)
+          - box-shadow: none
+          - backdrop-filter: blur(4px)
+        icon:
+          - color: white
+          - width: 24px
+  download: |
     [[[
-      return states['sensor.peanut_gallery_date']?.state || '';
+      const src = states['sensor.peanut_gallery_image_url']?.state || '/local/peanut_gallery/peanuts.jpg';
+      const cleanSrc = src.split('?')[0];
+      const date = states['sensor.peanut_gallery_image_url']?.attributes?.date || 'peanuts';
+
+      return `
+        <a
+          href="${src}"
+          download="peanuts-${date}.jpg"
+          target="_blank"
+          style="
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 42px;
+            height: 42px;
+            border-radius: 999px;
+            background: rgba(0, 0, 0, 0.55);
+            color: white;
+            text-decoration: none;
+            backdrop-filter: blur(4px);
+          "
+        >
+          <ha-icon icon="mdi:download" style="--mdc-icon-size: 24px;"></ha-icon>
+        </a>
+      `;
     ]]]
 tap_action:
-  action: perform-action
-  perform_action: peanut_gallery.random
-
-double_tap_action:
-  action: url
-  url_path: |
-    [[[
-      return states['sensor.peanut_gallery_image_url']?.state || '/local/peanut_gallery/peanuts.jpg';
-    ]]]
+  action: none
 ```
 
 ## Example automation
