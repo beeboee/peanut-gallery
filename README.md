@@ -50,6 +50,8 @@ peanut_gallery:
 
 Restart Home Assistant after editing `configuration.yaml`.
 
+You can also change these settings from the integration's **Configure** menu in Home Assistant. The repo already includes a config flow and options flow, so this is not limited to add-ons or apps.
+
 ## Services
 
 ### Today's comic
@@ -96,7 +98,9 @@ The image URL sensor points to the current saved comic image. By default that im
 
 ## Example dashboard card
 
-This card keeps the controls pinned to the visible comic window, not the comic image itself. The comic can be horizontally scrolled while the today, shuffle, and download buttons stay visible.
+This card keeps the controls pinned to the visible comic window, not the comic image itself. The comic can be horizontally scrolled while the today, shuffle, and action-menu buttons stay visible.
+
+The bottom-right three-dot button opens a small action menu. The menu contains a download button and a **Time machine** date picker. On phones, the Time machine control uses the operating system's native date picker.
 
 ```yaml
 type: custom:button-card
@@ -131,7 +135,7 @@ styles:
       - top: 8px
       - right: 8px
       - z-index: 5
-    download:
+    menu:
       - position: absolute
       - right: 8px
       - bottom: 8px
@@ -219,31 +223,114 @@ custom_fields:
         icon:
           - color: white
           - width: 24px
-  download: |
+  menu: |
     [[[
       const src = states['sensor.peanut_gallery_image_url']?.state || '/local/peanut_gallery/peanuts.jpg';
-      const date = states['sensor.peanut_gallery_image_url']?.attributes?.date || 'peanuts';
+      const currentDate = states['sensor.peanut_gallery_image_url']?.attributes?.date || '';
+      const startDate = '1950-10-02';
+      const now = new Date();
+      const localToday = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+      const dateValue = currentDate || localToday;
+      const pickerId = `peanut-gallery-date-${Math.random().toString(36).slice(2)}`;
+
+      setTimeout(() => {
+        const root = this.shadowRoot || this;
+        const picker = root.querySelector(`#${pickerId}`);
+        if (!picker || picker.dataset.peanutGalleryBound === 'true') return;
+
+        picker.dataset.peanutGalleryBound = 'true';
+        picker.addEventListener('click', (event) => event.stopPropagation());
+        picker.addEventListener('change', (event) => {
+          event.stopPropagation();
+          const date = event.target.value;
+          if (!date) return;
+          hass.callService('peanut_gallery', 'date', { date });
+        });
+      }, 0);
 
       return `
-        <a
-          href="${src}"
-          download="peanuts-${date}.jpg"
-          target="_blank"
-          style="
+        <style>
+          .peanut-gallery-menu {
+            position: relative;
+            outline: none;
+          }
+          .peanut-gallery-trigger,
+          .peanut-gallery-action {
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 42px;
+            min-width: 42px;
             height: 42px;
             border-radius: 999px;
             background: rgba(0, 0, 0, 0.55);
             color: white;
             text-decoration: none;
+            border: 0;
+            box-sizing: border-box;
             backdrop-filter: blur(4px);
-          "
-        >
-          <ha-icon icon="mdi:download" style="--mdc-icon-size: 24px;"></ha-icon>
-        </a>
+          }
+          .peanut-gallery-trigger {
+            width: 42px;
+          }
+          .peanut-gallery-panel {
+            display: none;
+            flex-direction: column-reverse;
+            align-items: flex-end;
+            gap: 8px;
+          }
+          .peanut-gallery-menu:focus-within .peanut-gallery-trigger {
+            display: none;
+          }
+          .peanut-gallery-menu:focus-within .peanut-gallery-panel {
+            display: flex;
+          }
+          .peanut-gallery-time-machine {
+            position: relative;
+            gap: 8px;
+            width: max-content;
+            padding: 0 14px;
+            font-size: 13px;
+            line-height: 1;
+            font-weight: 500;
+          }
+          .peanut-gallery-date-input {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+          }
+        </style>
+        <div class="peanut-gallery-menu" tabindex="0" aria-label="Comic actions">
+          <div class="peanut-gallery-trigger">
+            <ha-icon icon="mdi:dots-horizontal" style="--mdc-icon-size: 24px;"></ha-icon>
+          </div>
+          <div class="peanut-gallery-panel">
+            <a
+              class="peanut-gallery-action"
+              href="${src}"
+              download="peanuts-${dateValue}.jpg"
+              target="_blank"
+              aria-label="Download comic"
+              onclick="event.stopPropagation();"
+            >
+              <ha-icon icon="mdi:download" style="--mdc-icon-size: 24px;"></ha-icon>
+            </a>
+            <label class="peanut-gallery-action peanut-gallery-time-machine" aria-label="Pick comic date">
+              <ha-icon icon="mdi:calendar-search" style="--mdc-icon-size: 20px;"></ha-icon>
+              <span>Time machine</span>
+              <input
+                id="${pickerId}"
+                class="peanut-gallery-date-input"
+                type="date"
+                min="${startDate}"
+                max="${localToday}"
+                value="${dateValue}"
+              />
+            </label>
+          </div>
+        </div>
       `;
     ]]]
 tap_action:
