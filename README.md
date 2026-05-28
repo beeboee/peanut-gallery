@@ -96,7 +96,7 @@ The image URL sensor points to the current saved comic image. By default that im
 
 ## Example dashboard card
 
-This card keeps the controls pinned to the visible comic window, not the comic image itself. The comic can be horizontally scrolled while the home, shuffle, and download buttons stay visible.
+This card keeps the controls pinned to the visible comic window, not the comic image itself. The comic can be horizontally scrolled while the today, shuffle, and download buttons stay visible.
 
 ```yaml
 type: custom:button-card
@@ -121,7 +121,7 @@ styles:
     comic:
       - width: 100%
       - min-width: 0
-    home:
+    today:
       - position: absolute
       - top: 8px
       - left: 8px
@@ -181,14 +181,14 @@ custom_fields:
         </div>
       `;
     ]]]
-  home:
+  today:
     card:
       type: custom:button-card
-      icon: mdi:home-variant-outline
+      icon: mdi:calendar-today
       show_name: false
       tap_action:
-        action: navigate
-        navigation_path: /dashboard-home/0
+        action: perform-action
+        perform_action: peanut_gallery.today
       styles:
         card:
           - width: 42px
@@ -222,7 +222,6 @@ custom_fields:
   download: |
     [[[
       const src = states['sensor.peanut_gallery_image_url']?.state || '/local/peanut_gallery/peanuts.jpg';
-      const cleanSrc = src.split('?')[0];
       const date = states['sensor.peanut_gallery_image_url']?.attributes?.date || 'peanuts';
 
       return `
