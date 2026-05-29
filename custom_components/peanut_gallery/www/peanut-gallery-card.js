@@ -158,6 +158,8 @@ class PeanutGalleryCard extends HTMLElement {
   }
 
   toggleControls() {
+    if (this.actionInProgress) return;
+
     this.controlsVisible = !this.controlsVisible;
     const card = this.$("ha-card");
 
@@ -205,7 +207,11 @@ class PeanutGalleryCard extends HTMLElement {
       <style>
         :host(.busy) .today,
         :host(.busy) .shuffle,
-        :host(.busy) .date-picker {
+        :host(.busy) .date-label,
+        :host(.busy) .menu-summary,
+        :host(.busy) .menu-action,
+        :host(.busy) .date-picker,
+        :host(.busy) #comic {
           pointer-events: none;
           opacity: 0.6;
         }
