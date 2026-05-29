@@ -30,6 +30,7 @@ class PeanutGalleryCard extends HTMLElement {
     this.actionInProgress = false;
     this.autoTodayTimer = null;
     this.didAutoLoadToday = false;
+    this.onTodayView = false;
     this.renderBase();
   }
 
@@ -152,6 +153,15 @@ class PeanutGalleryCard extends HTMLElement {
     return isoDate || "";
   }
 
+  isShowingTodayView() {
+    return this.onTodayView || this.getIsoDate() === this.todayIso();
+  }
+
+  updateTodayButton() {
+    const card = this.$("ha-card");
+    if (card) card.classList.toggle("on-today", this.isShowingTodayView());
+  }
+
   targetDateForShuffle() {
     return this.getIsoDate() || this.todayIso();
   }
@@ -175,6 +185,7 @@ class PeanutGalleryCard extends HTMLElement {
 
     this.maybeAutoLoadToday(imageSrc);
     this.updateSameDateButton();
+    this.updateTodayButton();
   }
 
   maybeAutoLoadToday(imageSrc) {
@@ -284,11 +295,15 @@ class PeanutGalleryCard extends HTMLElement {
 
   showToday() {
     this.clearAutoToday();
+    this.onTodayView = true;
+    this.updateTodayButton();
     this.setDateLabel("Today");
     return this.runAction("today", () => this.callAction(this.config.today_action, this.serviceData()));
   }
 
   showRandom() {
+    this.onTodayView = false;
+    this.updateTodayButton();
     const data = this.serviceData();
     if (this.sameDateShuffle) {
       data.same_date = true;
@@ -303,6 +318,8 @@ class PeanutGalleryCard extends HTMLElement {
 
   showDate(date) {
     if (!date) return Promise.resolve();
+    this.onTodayView = false;
+    this.updateTodayButton();
     return this.runAction("date", async () => {
       await this.callAction(this.config.date_action, this.serviceData({ date }));
       this.scheduleAutoToday();
@@ -355,6 +372,7 @@ class PeanutGalleryCard extends HTMLElement {
         .menu-panel { display: flex; flex-direction: column-reverse; align-items: flex-end; gap: 8px; margin-bottom: 8px; }
         .time-machine { position: relative; }
         input[type="date"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+        ha-card.on-today .today,
         ha-card.controls-hidden .today, ha-card.controls-hidden .shuffle, ha-card.controls-hidden .date-label, ha-card.controls-hidden .menu,
         ha-card.no-image .today, ha-card.no-image .shuffle, ha-card.no-image .date-label, ha-card.no-image .menu { display: none; }
       </style>
@@ -393,6 +411,7 @@ class PeanutGalleryCard extends HTMLElement {
       if (menu) menu.open = false;
     });
     this.updateSameDateButton();
+    this.updateTodayButton();
   }
 }
 
