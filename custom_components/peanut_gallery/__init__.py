@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import date
 from pathlib import Path
 
@@ -79,6 +80,14 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         async_dispatcher_send(hass, SIGNAL_UPDATED)
         return result
 
+    async def _refill_in_background(client: PeanutGalleryClient) -> None:
+        try:
+            await hass.async_add_executor_job(client.refill)
+            async_dispatcher_send(hass, SIGNAL_UPDATED)
+        except Exception:
+            # Random display should not fail just because background refill failed.
+            return
+
     async def handle_today(call: ServiceCall) -> None:
         client = hass.data[DOMAIN]["client"]
         await _run_and_update(client.serve_today)
@@ -86,6 +95,7 @@ async def _async_register_services(hass: HomeAssistant) -> None:
     async def handle_random(call: ServiceCall) -> None:
         client = hass.data[DOMAIN]["client"]
         await _run_and_update(client.serve_random)
+        asyncio.create_task(_refill_in_background(client))
 
     async def handle_date(call: ServiceCall) -> None:
         client = hass.data[DOMAIN]["client"]
