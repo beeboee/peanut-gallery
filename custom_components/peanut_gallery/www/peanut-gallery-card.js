@@ -10,6 +10,7 @@ class PeanutGalleryCard extends HTMLElement {
       fallback_image: "/local/peanut_gallery/peanuts.jpg",
       start_date: "1950-10-02",
       show_today_label: true,
+      auto_today_minutes: 30,
       ...config,
     };
 
@@ -21,6 +22,7 @@ class PeanutGalleryCard extends HTMLElement {
     this.lastImageSrc = "";
     this.lastDateLabel = "";
     this.actionInProgress = false;
+    this.autoTodayTimer = null;
     this.renderBase();
   }
 
@@ -42,10 +44,28 @@ class PeanutGalleryCard extends HTMLElement {
       .toISOString()
       .slice(0, 10);
   }
+
   serviceData(extra = {}) {
     const data = { ...extra };
     if (this.config.source_url) data.source_url = this.config.source_url;
     return data;
+  }
+
+  clearAutoToday() {
+    if (this.autoTodayTimer) {
+      window.clearTimeout(this.autoTodayTimer);
+      this.autoTodayTimer = null;
+    }
+  }
+
+  scheduleAutoToday() {
+    this.clearAutoToday();
+    const minutes = Number(this.config.auto_today_minutes ?? 30);
+    if (!minutes || minutes <= 0) return;
+
+    this.autoTodayTimer = window.setTimeout(() => {
+      this.showToday();
+    }, minutes * 60 * 1000);
   }
 
   getImageEntity() {
@@ -94,13 +114,13 @@ class PeanutGalleryCard extends HTMLElement {
     if (imageSrc !== this.lastImageSrc) {
       this.lastImageSrc = imageSrc;
       this.setImage(imageSrc);
-      this.setDownload(imageSrc);
+      this.setImageLink(imageSrc);
     }
 
     if (dateLabel !== this.lastDateLabel) {
       this.lastDateLabel = dateLabel;
       this.setDateLabel(dateLabel);
-      this.setDownload(imageSrc);
+      this.setImageLink(imageSrc);
     }
   }
 
@@ -128,12 +148,12 @@ class PeanutGalleryCard extends HTMLElement {
     return this.todayIso();
   }
 
-  setDownload(src) {
-    const link = this.$(".download");
+  setImageLink(src) {
+    const link = this.$(".open-image");
     if (!link || !src) return;
 
     link.href = src;
-    link.download = `peanuts - ${this.downloadDatePart()}.jpg`;
+    link.removeAttribute("download");
   }
 
   setDateLabel(text) {
@@ -195,23 +215,26 @@ class PeanutGalleryCard extends HTMLElement {
   }
 
   showToday() {
+    this.clearAutoToday();
     this.setDateLabel("Today");
     return this.runAction("today", () =>
       this.callAction(this.config.today_action, this.serviceData())
     );
   }
-  
+
   showRandom() {
-    return this.runAction("random", () =>
-      this.callAction(this.config.random_action, this.serviceData())
-    );
+    return this.runAction("random", async () => {
+      await this.callAction(this.config.random_action, this.serviceData());
+      this.scheduleAutoToday();
+    });
   }
-  
+
   showDate(date) {
     if (!date) return Promise.resolve();
-    return this.runAction("date", () =>
-      this.callAction(this.config.date_action, this.serviceData({ date }))
-    );
+    return this.runAction("date", async () => {
+      await this.callAction(this.config.date_action, this.serviceData({ date }));
+      this.scheduleAutoToday();
+    });
   }
 
   renderBase() {
@@ -368,8 +391,8 @@ class PeanutGalleryCard extends HTMLElement {
           </summary>
 
           <div class="menu-panel">
-            <a class="menu-action download" download="peanuts.jpg" target="_blank" title="Download">
-              <ha-icon icon="mdi:download"></ha-icon>
+            <a class="menu-action open-image" target="_blank" rel="noopener noreferrer" title="Open image">
+              <ha-icon icon="mdi:open-in-new"></ha-icon>
             </a>
 
             <label class="menu-action time-machine" title="Time machine">
@@ -420,5 +443,5 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "peanut-gallery-card",
   name: "Peanut Gallery Card",
-  description: "Shows a Peanuts comic with today, shuffle, download, and date controls.",
+  description: "Shows a GoComics comic with today, shuffle, open image, and date controls.",
 });
