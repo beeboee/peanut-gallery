@@ -29,6 +29,7 @@ from .const import (
     DEFAULT_SOURCE_URL,
     DEFAULT_START_DATE,
     DOMAIN,
+    SERVICE_ARCHIVE_STEP,
     SERVICE_DATE,
     SERVICE_RANDOM,
     SERVICE_REFILL,
@@ -124,6 +125,18 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         client = hass.data[DOMAIN]["client"]
         await _run_and_update(client.refill)
 
+    async def handle_archive_step(call: ServiceCall) -> None:
+        client = hass.data[DOMAIN]["client"]
+        source_url = call.data.get(CONF_SOURCE_URL)
+        max_items = int(call.data.get("max_items", 5))
+
+        status = await hass.async_add_executor_job(
+            lambda: client.archive_step(source_url, max_items)
+        )
+
+        hass.data[DOMAIN].setdefault("archive_status", {})[status["slug"]] = status
+        async_dispatcher_send(hass, SIGNAL_UPDATED)
+
     optional_fields = {SOURCE_FIELD: cv.string, CARD_ID_FIELD: cv.string}
     hass.services.async_register(
         DOMAIN,
@@ -145,7 +158,17 @@ async def _async_register_services(hass: HomeAssistant) -> None:
     )
     hass.services.async_register(DOMAIN, SERVICE_REFILL, handle_refill)
     hass.data[DOMAIN]["services_registered"] = True
-
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_ARCHIVE_STEP,
+        handle_archive_step,
+        schema=vol.Schema(
+            {
+                SOURCE_FIELD: cv.string,
+                vol.Optional("max_items", default=5): vol.Coerce(int),
+            }
+        ),
+    )
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     hass.data.setdefault(DOMAIN, {})
@@ -160,6 +183,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN].setdefault("last_result", None)
     hass.data[DOMAIN].setdefault("results", {})
     hass.data[DOMAIN].setdefault("instances", {})
+    hass.data[DOMAIN].setdefault("archive_status", {})
 
     await _async_register_frontend(hass)
     await _async_register_services(hass)
