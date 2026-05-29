@@ -24,6 +24,18 @@ async def async_setup_entry(
     )
 
 
+def _result_dict(result) -> dict:
+    return {
+        "slug": result.slug,
+        "image_url": f"{result.image_url}?{result.day.isoformat()}",
+        "raw_image_url": result.image_url,
+        "date": result.day.isoformat(),
+        "date_text": result.date_text,
+        "path": str(result.image_path),
+        "queue_size": result.queue_size,
+    }
+
+
 class PeanutGalleryBaseSensor(SensorEntity):
     _attr_should_poll = False
 
@@ -42,6 +54,10 @@ class PeanutGalleryBaseSensor(SensorEntity):
     @property
     def results(self):
         return self.hass.data.get(DOMAIN, {}).get("results", {})
+
+    @property
+    def instances(self):
+        return self.hass.data.get(DOMAIN, {}).get("instances", {})
 
 
 class PeanutGalleryDateSensor(PeanutGalleryBaseSensor):
@@ -63,7 +79,15 @@ class PeanutGalleryDateSensor(PeanutGalleryBaseSensor):
                     "date_text": result.date_text,
                 }
                 for slug, result in self.results.items()
-            }
+            },
+            "instances": {
+                card_id: {
+                    "slug": result.slug,
+                    "date": result.day.isoformat(),
+                    "date_text": result.date_text,
+                }
+                for card_id, result in self.instances.items()
+            },
         }
 
 
@@ -85,25 +109,15 @@ class PeanutGalleryImageSensor(PeanutGalleryBaseSensor):
         attrs = {}
 
         if result:
-            attrs.update(
-                {
-                    "image_url": result.image_url,
-                    "date": result.day.isoformat(),
-                    "date_text": result.date_text,
-                    "slug": result.slug,
-                    "path": str(result.image_path),
-                }
-            )
+            attrs.update(_result_dict(result))
 
         attrs["sources"] = {
-            slug: {
-                "image_url": f"{item.image_url}?{item.day.isoformat()}",
-                "raw_image_url": item.image_url,
-                "date": item.day.isoformat(),
-                "date_text": item.date_text,
-                "path": str(item.image_path),
-            }
+            slug: _result_dict(item)
             for slug, item in self.results.items()
+        }
+        attrs["instances"] = {
+            card_id: _result_dict(item)
+            for card_id, item in self.instances.items()
         }
 
         return attrs
@@ -127,5 +141,12 @@ class PeanutGalleryQueueSensor(PeanutGalleryBaseSensor):
                     "queue_size": result.queue_size,
                 }
                 for slug, result in self.results.items()
-            }
+            },
+            "instances": {
+                card_id: {
+                    "slug": result.slug,
+                    "queue_size": result.queue_size,
+                }
+                for card_id, result in self.instances.items()
+            },
         }
