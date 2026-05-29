@@ -65,6 +65,7 @@ class PeanutGalleryClient:
         self.current_file = self._resolve_path(current_image)
         self.date_file = self._resolve_path(date_file)
         self.queue_file = self._resolve_path(queue_file)
+        self.archive_state_file = self.config_dir / "peanut_gallery_archive_state.json"
         self.cache_size = cache_size
         self.start_date = start_date
         self.source = self.parse_source_url(source_url)
@@ -134,6 +135,67 @@ class PeanutGalleryClient:
             raise ValueError(f"Unexpected archive filename {path.name}")
         return date.fromisoformat(stem.removeprefix(prefix))
 
+    def _load_archive_state(self) -> dict:
+        if not self.archive_state_file.exists():
+            return {}
+
+        try:
+            data = json.loads(self.archive_state_file.read_text())
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
+    def _save_archive_state(self, state: dict) -> None:
+        self.archive_state_file.write_text(json.dumps(state, indent=2, sort_keys=True))
+
+    def archive_step(self, source_url: str | None = None, max_items: int = 5) -> dict:
+        source = self._source(source_url)
+        state = self._load_archive_state()
+        source_state = state.setdefault(source.slug, {})
+
+        current = date.fromisoformat(
+            source_state.get("next_date", source.start_date.isoformat())
+        )
+        end = date.today()
+
+        checked = 0
+        saved = 0
+        skipped = 0
+        failed = 0
+        last_error = None
+
+        while current <= end and checked < max_items:
+            checked += 1
+
+            try:
+                path = self._archive_path_for(source, current)
+
+                if path.exists() and path.stat().st_size > MIN_IMAGE_BYTES:
+                    skipped += 1
+                else:
+                    self._fetch_day(source, current)
+                    saved += 1
+
+            except Exception as err:
+                failed += 1
+                last_error = str(err)
+                break
+
+            current += timedelta(days=1)
+
+        source_state["slug"] = source.slug
+        source_state["next_date"] = current.isoformat()
+        source_state["checked"] = int(source_state.get("checked", 0)) + checked
+        source_state["saved"] = int(source_state.get("saved", 0)) + saved
+        source_state["skipped"] = int(source_state.get("skipped", 0)) + skipped
+        source_state["failed"] = int(source_state.get("failed", 0)) + failed
+        source_state["last_error"] = last_error
+        source_state["archive_count"] = len(self._archive_files(source))
+
+        self._save_archive_state(state)
+
+        return dict(source_state)
+        
     def _get(self, url: str, headers: dict[str, str], allow_redirects: bool = True) -> requests.Response:
         last_error: Exception | None = None
 
