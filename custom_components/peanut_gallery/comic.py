@@ -30,6 +30,7 @@ IMAGE_HEADERS = {
 MIN_IMAGE_BYTES = 10000
 FETCH_ATTEMPTS = 3
 DEFAULT_SOURCE_URL = "https://www.gocomics.com/peanuts/1950/10/02"
+DAILY_MODE_MONTHLY_RANDOM_YEAR = "monthly_random_year"
 
 
 @dataclass(frozen=True)
@@ -66,6 +67,7 @@ class PeanutGalleryClient:
         self.date_file = self._resolve_path(date_file)
         self.queue_file = self._resolve_path(queue_file)
         self.archive_state_file = self.config_dir / "peanut_gallery_archive_state.json"
+        self.daily_state_file = self.config_dir / "peanut_gallery_daily_state.json"
         self.cache_size = cache_size
         self.start_date = start_date
         self.source = self.parse_source_url(source_url)
@@ -140,6 +142,11 @@ class PeanutGalleryClient:
             raise ValueError(f"Unexpected archive filename {path.name}")
         return date.fromisoformat(stem.removeprefix(prefix))
 
+    def _result_from_file(self, source: GoComicsSource, path: Path) -> PeanutGalleryResult:
+        day = self._day_from_archive_path(source, path)
+        self._save_current_date(day)
+        return self._result(source, day, path)
+
     def _files_for_month_day(self, source: GoComicsSource, target_day: date) -> list[Path]:
         files = []
         for path in self._archive_files(source):
@@ -151,18 +158,83 @@ class PeanutGalleryClient:
                 files.append(path)
         return files
 
-    def _load_archive_state(self) -> dict:
-        if not self.archive_state_file.exists():
-            return {}
+    def _is_sunday_type(self, day: date) -> bool:
+        return day.weekday() == 6
 
+    def _files_for_month_weekday_type(self, source: GoComicsSource, target_day: date) -> list[Path]:
+        wanted_sunday = self._is_sunday_type(target_day)
+        files = []
+        for path in self._archive_files(source):
+            try:
+                day = self._day_from_archive_path(source, path)
+            except Exception:
+                continue
+            if day.month == target_day.month and self._is_sunday_type(day) == wanted_sunday:
+                files.append(path)
+        return files
+
+    def _files_for_weekday_type(self, source: GoComicsSource, target_day: date) -> list[Path]:
+        wanted_sunday = self._is_sunday_type(target_day)
+        files = []
+        for path in self._archive_files(source):
+            try:
+                day = self._day_from_archive_path(source, path)
+            except Exception:
+                continue
+            if self._is_sunday_type(day) == wanted_sunday:
+                files.append(path)
+        return files
+
+    def _available_matching_years_for_month(
+        self,
+        source: GoComicsSource,
+        target_day: date,
+        archive_end_date: str | None = None,
+    ) -> list[int]:
+        end_limit = self._parse_date(archive_end_date)
+        end = min(date.today(), end_limit) if end_limit else date.today()
+        target_month_start_weekday = date(target_day.year, target_day.month, 1).weekday()
+        years: set[int] = set()
+
+        for path in self._archive_files(source):
+            try:
+                day = self._day_from_archive_path(source, path)
+            except Exception:
+                continue
+
+            if day.month != target_day.month:
+                continue
+            if day < source.start_date or day > end:
+                continue
+            if date(day.year, target_day.month, 1).weekday() != target_month_start_weekday:
+                continue
+            years.add(day.year)
+
+        return sorted(years)
+
+    def _load_json_file(self, path: Path) -> dict:
+        if not path.exists():
+            return {}
         try:
-            data = json.loads(self.archive_state_file.read_text())
+            data = json.loads(path.read_text())
             return data if isinstance(data, dict) else {}
         except Exception:
             return {}
 
+    def _save_json_file(self, path: Path, state: dict) -> None:
+        path.write_text(json.dumps(state, indent=2, sort_keys=True))
+
+    def _load_archive_state(self) -> dict:
+        return self._load_json_file(self.archive_state_file)
+
     def _save_archive_state(self, state: dict) -> None:
-        self.archive_state_file.write_text(json.dumps(state, indent=2, sort_keys=True))
+        self._save_json_file(self.archive_state_file, state)
+
+    def _load_daily_state(self) -> dict:
+        return self._load_json_file(self.daily_state_file)
+
+    def _save_daily_state(self, state: dict) -> None:
+        self._save_json_file(self.daily_state_file, state)
 
     def archive_step(
         self,
@@ -378,8 +450,61 @@ class PeanutGalleryClient:
         self._save_current_date(day)
         return self._result(source, day, image_path)
 
-    def serve_today(self, source_url: str | None = None) -> PeanutGalleryResult:
+    def serve_today(
+        self,
+        source_url: str | None = None,
+        archive_end_date: str | None = None,
+        daily_mode: str | None = None,
+        card_id: str | None = None,
+    ) -> PeanutGalleryResult:
+        source = self._source(source_url)
+
+        if archive_end_date and daily_mode == DAILY_MODE_MONTHLY_RANDOM_YEAR:
+            result = self._serve_monthly_random_year_today(source, archive_end_date, card_id)
+            if result is not None:
+                return result
+
         return self.serve_day(date.today(), source_url)
+
+    def _serve_monthly_random_year_today(
+        self,
+        source: GoComicsSource,
+        archive_end_date: str | None,
+        card_id: str | None,
+    ) -> PeanutGalleryResult | None:
+        today = date.today()
+        month_key = today.strftime("%Y-%m")
+        instance_key = card_id or source.slug
+        state = self._load_daily_state()
+        instance_state = state.setdefault(instance_key, {})
+
+        years = self._available_matching_years_for_month(source, today, archive_end_date)
+        selected_year = instance_state.get(month_key)
+
+        if selected_year not in years:
+            selected_year = random.choice(years) if years else None
+            if selected_year is not None:
+                instance_state[month_key] = selected_year
+                self._save_daily_state(state)
+
+        if selected_year is not None:
+            try:
+                chosen_day = date(int(selected_year), today.month, today.day)
+                path = self._archive_path_for(source, chosen_day)
+                if path.exists() and path.stat().st_size > MIN_IMAGE_BYTES:
+                    return self._result_from_file(source, path)
+            except ValueError:
+                pass
+
+        for candidates in (
+            self._files_for_month_weekday_type(source, today),
+            self._files_for_weekday_type(source, today),
+            self._archive_files(source),
+        ):
+            if candidates:
+                return self._result_from_file(source, random.choice(candidates))
+
+        return None
 
     def serve_random(
         self,
@@ -394,16 +519,10 @@ class PeanutGalleryClient:
             target_day = date.fromisoformat(target_date)
             same_day_files = self._files_for_month_day(source, target_day)
             if same_day_files:
-                image_path = random.choice(same_day_files)
-                day = self._day_from_archive_path(source, image_path)
-                self._save_current_date(day)
-                return self._result(source, day, image_path)
+                return self._result_from_file(source, random.choice(same_day_files))
 
         if files:
-            image_path = random.choice(files)
-            day = self._day_from_archive_path(source, image_path)
-            self._save_current_date(day)
-            return self._result(source, day, image_path)
+            return self._result_from_file(source, random.choice(files))
 
         return self.serve_today(source_url)
 
