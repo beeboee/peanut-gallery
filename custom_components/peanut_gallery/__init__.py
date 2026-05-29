@@ -170,17 +170,12 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         async_dispatcher_send(hass, SIGNAL_UPDATED)
 
     optional_fields = {SOURCE_FIELD: cv.string, CARD_ID_FIELD: cv.string}
+    daily_fields = {ARCHIVE_END_DATE_FIELD: cv.string, DAILY_MODE_FIELD: cv.string}
     hass.services.async_register(
         DOMAIN,
         SERVICE_TODAY,
         handle_today,
-        schema=vol.Schema(
-            {
-                **optional_fields,
-                ARCHIVE_END_DATE_FIELD: cv.string,
-                DAILY_MODE_FIELD: cv.string,
-            }
-        ),
+        schema=vol.Schema({**optional_fields, **daily_fields}),
     )
     hass.services.async_register(
         DOMAIN,
@@ -189,6 +184,7 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         schema=vol.Schema(
             {
                 **optional_fields,
+                **daily_fields,
                 SAME_DATE_FIELD: cv.boolean,
                 TARGET_DATE_FIELD: cv.string,
             }
