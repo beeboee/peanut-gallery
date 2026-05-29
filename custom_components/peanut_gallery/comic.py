@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import random
 import shutil
+import time
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
@@ -10,8 +11,22 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/125.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Connection": "close",
+}
+IMAGE_HEADERS = {
+    **HEADERS,
+    "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+}
 MIN_IMAGE_BYTES = 10000
+FETCH_ATTEMPTS = 3
 
 
 @dataclass
@@ -65,9 +80,25 @@ class PeanutGalleryClient:
     def _cache_path_for(self, day: date) -> Path:
         return self.cache_dir / f"peanuts_{day:%Y-%m-%d}.jpg"
 
+    def _get(self, url: str, headers: dict[str, str]) -> requests.Response:
+        last_error: Exception | None = None
+
+        for attempt in range(FETCH_ATTEMPTS):
+            try:
+                response = requests.get(url, headers=headers, timeout=30)
+                response.raise_for_status()
+                return response
+            except Exception as err:
+                last_error = err
+                if attempt < FETCH_ATTEMPTS - 1:
+                    time.sleep(1 + attempt)
+
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError(f"Failed to fetch {url}")
+
     def _extract_comic_url(self, page_url: str) -> str:
-        resp = requests.get(page_url, headers=HEADERS, timeout=30)
-        resp.raise_for_status()
+        resp = self._get(page_url, HEADERS)
         soup = BeautifulSoup(resp.text, "html.parser")
 
         candidates: list[str] = []
@@ -106,8 +137,7 @@ class PeanutGalleryClient:
         page_url = self._dated_url(day)
         img_url = self._extract_comic_url(page_url)
 
-        img_resp = requests.get(img_url, headers=HEADERS, timeout=30)
-        img_resp.raise_for_status()
+        img_resp = self._get(img_url, IMAGE_HEADERS)
 
         if len(img_resp.content) < MIN_IMAGE_BYTES:
             raise RuntimeError(f"Downloaded file too small from {img_url}")
@@ -190,13 +220,16 @@ class PeanutGalleryClient:
     def serve_random(self) -> PeanutGalleryResult:
         queue = self._load_queue()
 
-        if not queue:
-            self.refill()
-            queue = self._load_queue()
-            if not queue:
-                raise RuntimeError("Queue is empty and refill failed")
+        if queue:
+            day_str = queue.pop(0)
+            self._save_queue(queue)
+            return self.serve_day(date.fromisoformat(day_str))
 
-        day_str = queue.pop(0)
-        self._save_queue(queue)
-        day = date.fromisoformat(day_str)
-        return self.serve_day(day)
+        for _ in range(25):
+            day = self._pick_random_day()
+            try:
+                return self.serve_day(day)
+            except Exception:
+                continue
+
+        raise RuntimeError("Queue is empty and direct random fetch failed")
