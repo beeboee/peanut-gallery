@@ -20,10 +20,11 @@ class PeanutGalleryCard extends HTMLElement {
     };
 
     if (!this.config.card_id) this.config.card_id = this.defaultCardId();
+    this.sameDateStorageKey = this.sameDateStorageKeyFor(this.config.card_id);
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
 
     this.controlsVisible = true;
-    this.sameDateShuffle = Boolean(this.config.same_date_shuffle);
+    this.sameDateShuffle = this.loadSameDateShuffle();
     this.lastImageSrc = "";
     this.lastDateLabel = "";
     this.actionInProgress = false;
@@ -68,6 +69,29 @@ class PeanutGalleryCard extends HTMLElement {
   }
 
   defaultCardId() { return `${this.sourceSlugFromUrl()}_main`; }
+
+  sameDateStorageKeyFor(cardId) {
+    return `peanut_gallery_same_date_shuffle_${cardId || this.defaultCardId()}`;
+  }
+
+  loadSameDateShuffle() {
+    try {
+      const stored = window.localStorage.getItem(this.sameDateStorageKey);
+      if (stored === "true") return true;
+      if (stored === "false") return false;
+    } catch {
+      // Ignore localStorage failures and use config default.
+    }
+    return Boolean(this.config.same_date_shuffle);
+  }
+
+  saveSameDateShuffle() {
+    try {
+      window.localStorage.setItem(this.sameDateStorageKey, this.sameDateShuffle ? "true" : "false");
+    } catch {
+      // Ignore localStorage failures. The in-memory toggle still works.
+    }
+  }
 
   instanceData() {
     const entity = this._hass?.states?.[this.config.image_entity];
@@ -274,6 +298,7 @@ class PeanutGalleryCard extends HTMLElement {
 
   toggleSameDateShuffle() {
     this.sameDateShuffle = !this.sameDateShuffle;
+    this.saveSameDateShuffle();
     this.updateSameDateButton();
   }
 
