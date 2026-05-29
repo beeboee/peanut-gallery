@@ -22,7 +22,7 @@ This project is unofficial and is not affiliated with GoComics or any comic publ
 - **Batch archive service** — crawl a comic gradually with configurable batch size and delay.
 - **Archive caps** — stop at a chosen end date for finite runs or curated sets.
 - **Archive status sensor** — expose date, image URL, queue size, and archive progress in Home Assistant.
-- ** This month's year** — stored at `/config/peanut_gallery_daily_state.json`
+- **This month's year** — stored at `/config/peanut_gallery_daily_state.json`
 
 </details>
 
@@ -124,10 +124,13 @@ For example, on `12-25`, shuffle chooses from archived `12-25` comics across dif
 
 The toggle is stored in browser local storage per `card_id`. It is not synced between devices.
 
+
 ### Time Machine
 
 The date picker (time machine) is limited by the comic's start date and, when set, `archive_end_date`.
 
+
+## Home Assistant 
 <details>
 <summary>Services</summary>
 
