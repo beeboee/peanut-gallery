@@ -17,9 +17,9 @@ class PeanutGalleryCard extends HTMLElement {
     }
 
     this.controlsVisible = true;
-    this.menuOpen = false;
     this.lastImageSrc = "";
     this.lastDateLabel = "";
+    this.actionInProgress = false;
     this.renderBase();
   }
 
@@ -42,9 +42,16 @@ class PeanutGalleryCard extends HTMLElement {
       .slice(0, 10);
   }
 
+  getImageEntity() {
+    return this._hass?.states?.[this.config.image_entity];
+  }
+
+  getDateEntity() {
+    return this._hass?.states?.[this.config.date_entity];
+  }
+
   getImageSrc() {
-    const entity = this._hass?.states?.[this.config.image_entity];
-    const state = entity?.state;
+    const state = this.getImageEntity()?.state;
 
     if (state && state !== "unknown" && state !== "unavailable") {
       return state;
@@ -53,16 +60,18 @@ class PeanutGalleryCard extends HTMLElement {
     return `${this.config.fallback_image}?${Date.now()}`;
   }
 
+  getIsoDate() {
+    return this.getImageEntity()?.attributes?.date || "";
+  }
+
   getDateLabel() {
-    const imageEntity = this._hass?.states?.[this.config.image_entity];
-    const dateEntity = this._hass?.states?.[this.config.date_entity];
-    const isoDate = imageEntity?.attributes?.date;
+    const isoDate = this.getIsoDate();
 
     if (this.config.show_today_label && isoDate === this.todayIso()) {
       return "Today";
     }
 
-    const dateText = dateEntity?.state;
+    const dateText = this.getDateEntity()?.state;
     if (dateText && dateText !== "unknown" && dateText !== "unavailable") {
       return dateText;
     }
@@ -85,6 +94,7 @@ class PeanutGalleryCard extends HTMLElement {
     if (dateLabel !== this.lastDateLabel) {
       this.lastDateLabel = dateLabel;
       this.setDateLabel(dateLabel);
+      this.setDownload(imageSrc);
     }
   }
 
@@ -99,14 +109,25 @@ class PeanutGalleryCard extends HTMLElement {
     }
   }
 
+  downloadDatePart() {
+    const isoDate = this.getIsoDate();
+    if (isoDate) return isoDate;
+
+    const label = this.lastDateLabel || this.getDateLabel();
+    const parsed = Date.parse(label);
+    if (!Number.isNaN(parsed)) {
+      return new Date(parsed).toISOString().slice(0, 10);
+    }
+
+    return this.todayIso();
+  }
+
   setDownload(src) {
     const link = this.$(".download");
     if (!link || !src) return;
 
     link.href = src;
-
-    const isoDate = this._hass?.states?.[this.config.image_entity]?.attributes?.date;
-    link.download = isoDate ? `peanuts-${isoDate}.jpg` : "peanuts.jpg";
+    link.download = `peanuts - ${this.downloadDatePart()}.jpg`;
   }
 
   setDateLabel(text) {
@@ -130,6 +151,12 @@ class PeanutGalleryCard extends HTMLElement {
     await this._hass.callService(domain, service, data);
   }
 
+  refreshImageSoon() {
+    window.setTimeout(() => this.updateFromHass(), 250);
+    window.setTimeout(() => this.updateFromHass(), 1000);
+    window.setTimeout(() => this.updateFromHass(), 2500);
+  }
+
   toggleControls() {
     this.controlsVisible = !this.controlsVisible;
     const card = this.$("ha-card");
@@ -139,41 +166,50 @@ class PeanutGalleryCard extends HTMLElement {
     }
 
     if (!this.controlsVisible) {
-      this.setMenuOpen(false);
+      const menu = this.$("details.menu");
+      if (menu) menu.open = false;
     }
   }
 
-  setMenuOpen(open) {
-    this.menuOpen = open;
+  async runAction(actionName, callback) {
+    if (this.actionInProgress) return;
 
-    const panel = this.$(".menu-panel");
-    const icon = this.$(".menu-toggle ha-icon");
+    this.actionInProgress = true;
+    this.shadowRoot.host.classList.add("busy");
 
-    if (panel) panel.hidden = !open;
-    if (icon) icon.setAttribute("icon", open ? "mdi:close" : "mdi:dots-horizontal");
+    try {
+      await callback();
+      this.refreshImageSoon();
+    } finally {
+      this.actionInProgress = false;
+      this.shadowRoot.host.classList.remove("busy");
+    }
   }
 
-  async showToday() {
-    this.setMenuOpen(false);
+  showToday() {
     this.setDateLabel("Today");
-    await this.callAction(this.config.today_action);
+    return this.runAction("today", () => this.callAction(this.config.today_action));
   }
 
-  async showRandom() {
-    this.setMenuOpen(false);
-    await this.callAction(this.config.random_action);
+  showRandom() {
+    return this.runAction("random", () => this.callAction(this.config.random_action));
   }
 
-  async showDate(date) {
-    if (!date) return;
-
-    this.setMenuOpen(false);
-    await this.callAction(this.config.date_action, { date });
+  showDate(date) {
+    if (!date) return Promise.resolve();
+    return this.runAction("date", () => this.callAction(this.config.date_action, { date }));
   }
 
   renderBase() {
     this.shadowRoot.innerHTML = `
       <style>
+        :host(.busy) .today,
+        :host(.busy) .shuffle,
+        :host(.busy) .date-picker {
+          pointer-events: none;
+          opacity: 0.6;
+        }
+
         ha-card {
           position: relative;
           overflow: hidden;
@@ -198,7 +234,8 @@ class PeanutGalleryCard extends HTMLElement {
         }
 
         .overlay-button,
-        .menu-action {
+        .menu-action,
+        .menu-summary {
           display: flex;
           align-items: center;
           justify-content: center;
@@ -213,6 +250,7 @@ class PeanutGalleryCard extends HTMLElement {
           text-decoration: none;
           backdrop-filter: blur(4px);
           -webkit-backdrop-filter: blur(4px);
+          box-sizing: border-box;
         }
 
         .today {
@@ -248,10 +286,18 @@ class PeanutGalleryCard extends HTMLElement {
           right: 8px;
           bottom: 8px;
           z-index: 5;
-          display: flex;
-          flex-direction: column-reverse;
-          align-items: flex-end;
-          gap: 8px;
+        }
+
+        .menu-summary {
+          list-style: none;
+        }
+
+        .menu-summary::-webkit-details-marker {
+          display: none;
+        }
+
+        .menu[open] .menu-summary {
+          display: none;
         }
 
         .menu-panel {
@@ -297,12 +343,12 @@ class PeanutGalleryCard extends HTMLElement {
 
         <div class="date-label"></div>
 
-        <div class="menu">
-          <button class="overlay-button menu-toggle" title="More" type="button">
+        <details class="menu">
+          <summary class="menu-summary" title="More">
             <ha-icon icon="mdi:dots-horizontal"></ha-icon>
-          </button>
+          </summary>
 
-          <div class="menu-panel" hidden>
+          <div class="menu-panel">
             <a class="menu-action download" download="peanuts.jpg" target="_blank" title="Download">
               <ha-icon icon="mdi:download"></ha-icon>
             </a>
@@ -312,7 +358,7 @@ class PeanutGalleryCard extends HTMLElement {
               <input class="date-picker" type="date" min="${this.config.start_date}" max="${this.todayIso()}" />
             </label>
           </div>
-        </div>
+        </details>
       </ha-card>
     `;
 
@@ -323,23 +369,26 @@ class PeanutGalleryCard extends HTMLElement {
     });
 
     this.$(".today").addEventListener("click", (event) => {
+      event.preventDefault();
       event.stopPropagation();
       this.showToday();
     });
 
     this.$(".shuffle").addEventListener("click", (event) => {
+      event.preventDefault();
       event.stopPropagation();
       this.showRandom();
     });
 
-    this.$(".menu-toggle").addEventListener("click", (event) => {
+    this.$(".menu").addEventListener("click", (event) => {
       event.stopPropagation();
-      this.setMenuOpen(!this.menuOpen);
     });
 
     this.$(".date-picker").addEventListener("change", (event) => {
       event.stopPropagation();
       this.showDate(event.currentTarget.value);
+      const menu = this.$("details.menu");
+      if (menu) menu.open = false;
     });
   }
 }
