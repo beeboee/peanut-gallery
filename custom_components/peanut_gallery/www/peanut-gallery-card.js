@@ -362,7 +362,7 @@ class PeanutGalleryCard extends HTMLElement {
           <summary class="menu-summary" title="More"><ha-icon icon="mdi:dots-horizontal"></ha-icon></summary>
           <div class="menu-panel">
             <a class="menu-action open-image" target="_blank" rel="noopener noreferrer" title="Open image"><ha-icon icon="mdi:open-in-new"></ha-icon></a>
-            <button class="menu-action same-date-toggle" type="button" title="Same-date shuffle"><ha-icon icon="mdi:firework"></ha-icon></button>
+            <button class="menu-action same-date-toggle" type="button" title="Same-date shuffle"><ha-icon icon="mdi:calendar-lock"></ha-icon></button>
             <label class="menu-action time-machine" title="Time machine"><ha-icon icon="mdi:history"></ha-icon><input class="date-picker" type="date" min="${this.config.start_date}" max="${this.todayIso()}" /></label>
           </div>
         </details>
