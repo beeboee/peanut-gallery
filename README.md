@@ -8,16 +8,18 @@ This project is unofficial and is not affiliated with GoComics or any comic publ
 
 ## Features
 
-- **Comic cards for Home Assistant** — readable web comics directly in Lovelace.
-- **Local comic archive** — save strips into `/config/www/gocomics/` for fast browsing.
-- **Archive shuffle** — randomize through saved comics without hammering the source site.
-- **Date-lock shuffle** — jump through the same calendar date across different years.
+- **One card, many comics** — point each card at its own GoComics URL.
+
+- **Independent panels** — group or seperate cards by giving them the same or different card_id.
+- **Archive shuffle** — randomize through saved comics.
+- **Date-lock shuffle** — shuffle through todays comics of yester-year.
 - **Archive daily mode** — pick a matching archive year each month and read it day by day.
 - **Time Machine** — choose a specific strip by date, limited to the comic's publish range.
 
 <details>
 <summary>Backend functions</summary>
-
+   
+- **Local comic archive** — save strips into `/config/www/gocomics/` for fast browsing.
 - **Batch archive service** — crawl a comic gradually with configurable batch size and delay.
 - **Archive caps** — stop at a chosen end date for finite runs or curated sets.
 - **Archive status sensor** — expose date, image URL, queue size, and archive progress in Home Assistant.
