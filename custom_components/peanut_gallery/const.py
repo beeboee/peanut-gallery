@@ -21,5 +21,6 @@ SERVICE_TODAY = "today"
 SERVICE_RANDOM = "random"
 SERVICE_DATE = "date"
 SERVICE_REFILL = "refill"
+SERVICE_ARCHIVE_STEP = "archive_step"
 
 SIGNAL_UPDATED = f"{DOMAIN}_updated"
