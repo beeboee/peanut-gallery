@@ -117,6 +117,23 @@ class PeanutGalleryClient:
     def _legacy_cache_path_for(self, day: date) -> Path:
         return self.cache_dir / f"peanuts_{day:%Y-%m-%d}.jpg"
 
+    def _archive_files(self, source: GoComicsSource) -> list[Path]:
+        root = self.archive_root / source.slug
+        if not root.exists():
+            return []
+        return sorted(
+            path
+            for path in root.glob(f"*/*/{source.slug}_*.jpg")
+            if path.exists() and path.stat().st_size > MIN_IMAGE_BYTES
+        )
+
+    def _day_from_archive_path(self, source: GoComicsSource, path: Path) -> date:
+        prefix = f"{source.slug}_"
+        stem = path.stem
+        if not stem.startswith(prefix):
+            raise ValueError(f"Unexpected archive filename {path.name}")
+        return date.fromisoformat(stem.removeprefix(prefix))
+
     def _get(self, url: str, headers: dict[str, str], allow_redirects: bool = True) -> requests.Response:
         last_error: Exception | None = None
 
@@ -221,7 +238,7 @@ class PeanutGalleryClient:
             image_path=image_path,
             image_url=self._public_url_for(image_path),
             date_text=day.strftime("%b %d, %Y"),
-            queue_size=len(self._load_queue()),
+            queue_size=len(self._archive_files(source)),
             slug=source.slug,
         )
 
@@ -260,15 +277,15 @@ class PeanutGalleryClient:
 
     def serve_random(self, source_url: str | None = None) -> PeanutGalleryResult:
         source = self._source(source_url)
+        files = self._archive_files(source)
 
-        for _ in range(25):
-            day = self._pick_random_day(source)
-            try:
-                return self.serve_day(day, source_url)
-            except Exception:
-                continue
+        if files:
+            image_path = random.choice(files)
+            day = self._day_from_archive_path(source, image_path)
+            self._save_current_date(day)
+            return self._result(source, day, image_path)
 
-        raise RuntimeError("Direct random fetch failed")
+        return self.serve_today(source_url)
 
     def archive_day_range(self, source_url: str | None, start: date, end: date, max_items: int = 250) -> dict:
         source = self._source(source_url)
