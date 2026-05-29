@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import random
+import re
 import shutil
 import time
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -27,6 +29,13 @@ IMAGE_HEADERS = {
 }
 MIN_IMAGE_BYTES = 10000
 FETCH_ATTEMPTS = 3
+DEFAULT_SOURCE_URL = "https://www.gocomics.com/peanuts/1950/10/02"
+
+
+@dataclass(frozen=True)
+class GoComicsSource:
+    slug: str
+    start_date: date
 
 
 @dataclass
@@ -36,6 +45,7 @@ class PeanutGalleryResult:
     image_url: str
     date_text: str
     queue_size: int
+    slug: str = "peanuts"
 
 
 class PeanutGalleryClient:
@@ -48,6 +58,7 @@ class PeanutGalleryClient:
         queue_file: str,
         cache_size: int,
         start_date: date,
+        source_url: str = DEFAULT_SOURCE_URL,
     ) -> None:
         self.config_dir = config_dir
         self.cache_dir = self._resolve_path(cache_dir)
@@ -56,10 +67,33 @@ class PeanutGalleryClient:
         self.queue_file = self._resolve_path(queue_file)
         self.cache_size = cache_size
         self.start_date = start_date
+        self.source = self.parse_source_url(source_url)
+        self.archive_root = self.config_dir / "www" / "gocomics"
 
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.current_file.parent.mkdir(parents=True, exist_ok=True)
         self.date_file.parent.mkdir(parents=True, exist_ok=True)
+        self.archive_root.mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def parse_source_url(source_url: str | None) -> GoComicsSource:
+        value = source_url or DEFAULT_SOURCE_URL
+        parsed = urlparse(value)
+        parts = [part for part in parsed.path.split("/") if part]
+
+        if len(parts) < 4:
+            raise ValueError("GoComics source_url must look like https://www.gocomics.com/peanuts/1950/10/02")
+
+        slug = parts[0]
+        year, month, day = parts[1:4]
+
+        if not re.fullmatch(r"[a-z0-9-]+", slug):
+            raise ValueError("GoComics comic slug contains unsupported characters")
+
+        return GoComicsSource(slug=slug, start_date=date(int(year), int(month), int(day)))
+
+    def _source(self, source_url: str | None = None) -> GoComicsSource:
+        return self.parse_source_url(source_url) if source_url else self.source
 
     def _resolve_path(self, value: str) -> Path:
         path = Path(value)
@@ -74,21 +108,21 @@ class PeanutGalleryClient:
         except ValueError:
             return str(path)
 
-    def _dated_url(self, day: date) -> str:
-        return f"https://www.gocomics.com/peanuts/{day:%Y/%m/%d}"
+    def _dated_url(self, source: GoComicsSource, day: date) -> str:
+        return f"https://www.gocomics.com/{source.slug}/{day:%Y/%m/%d}"
 
-    def _cache_path_for(self, day: date) -> Path:
-        return self.cache_dir / f"peanuts-{day:%Y-%m-%d}.jpg"
+    def _archive_path_for(self, source: GoComicsSource, day: date) -> Path:
+        return self.archive_root / source.slug / f"{day:%Y}" / f"{day:%m}" / f"{source.slug}_{day:%Y-%m-%d}.jpg"
 
     def _legacy_cache_path_for(self, day: date) -> Path:
         return self.cache_dir / f"peanuts_{day:%Y-%m-%d}.jpg"
 
-    def _get(self, url: str, headers: dict[str, str]) -> requests.Response:
+    def _get(self, url: str, headers: dict[str, str], allow_redirects: bool = True) -> requests.Response:
         last_error: Exception | None = None
 
         for attempt in range(FETCH_ATTEMPTS):
             try:
-                response = requests.get(url, headers=headers, timeout=30)
+                response = requests.get(url, headers=headers, timeout=30, allow_redirects=allow_redirects)
                 response.raise_for_status()
                 return response
             except Exception as err:
@@ -101,9 +135,11 @@ class PeanutGalleryClient:
         raise RuntimeError(f"Failed to fetch {url}")
 
     def _extract_comic_url(self, page_url: str) -> str:
-        resp = self._get(page_url, HEADERS)
-        soup = BeautifulSoup(resp.text, "html.parser")
+        resp = self._get(page_url, HEADERS, allow_redirects=False)
+        if resp.is_redirect or resp.is_permanent_redirect:
+            raise RuntimeError(f"Skipping redirected comic page {page_url}")
 
+        soup = BeautifulSoup(resp.text, "html.parser")
         candidates: list[str] = []
 
         for img in soup.find_all("img"):
@@ -131,21 +167,25 @@ class PeanutGalleryClient:
 
         raise RuntimeError(f"No comic asset image found on {page_url}")
 
-    def _fetch_day(self, day: date) -> Path:
-        path = self._cache_path_for(day)
+    def _fetch_day(self, source: GoComicsSource, day: date) -> Path:
+        path = self._archive_path_for(source, day)
         legacy_path = self._legacy_cache_path_for(day)
 
         if path.exists() and path.stat().st_size > MIN_IMAGE_BYTES:
             return path
 
-        if legacy_path.exists() and legacy_path.stat().st_size > MIN_IMAGE_BYTES:
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        if source.slug == "peanuts" and legacy_path.exists() and legacy_path.stat().st_size > MIN_IMAGE_BYTES:
             shutil.copyfile(legacy_path, path)
             return path
 
-        page_url = self._dated_url(day)
+        page_url = self._dated_url(source, day)
         img_url = self._extract_comic_url(page_url)
-
         img_resp = self._get(img_url, IMAGE_HEADERS)
+
+        if "image" not in img_resp.headers.get("Content-Type", ""):
+            raise RuntimeError(f"Downloaded content was not an image from {img_url}")
 
         if len(img_resp.content) < MIN_IMAGE_BYTES:
             raise RuntimeError(f"Downloaded file too small from {img_url}")
@@ -161,53 +201,46 @@ class PeanutGalleryClient:
             data = json.loads(self.queue_file.read_text())
             if not isinstance(data, list):
                 return []
-
-            cleaned: list[str] = []
-            for item in data:
-                try:
-                    day = date.fromisoformat(str(item))
-                    if self._cache_path_for(day).exists() or self._legacy_cache_path_for(day).exists():
-                        cleaned.append(day.isoformat())
-                except Exception:
-                    continue
-            return cleaned
+            return [str(item) for item in data]
         except Exception:
             return []
 
     def _save_queue(self, queue: list[str]) -> None:
         self.queue_file.write_text(json.dumps(queue))
 
-    def _pick_random_day(self) -> date:
+    def _pick_random_day(self, source: GoComicsSource) -> date:
         end = date.today()
-        return self.start_date + timedelta(days=random.randint(0, (end - self.start_date).days))
+        return source.start_date + timedelta(days=random.randint(0, (end - source.start_date).days))
 
     def _save_current_date(self, day: date) -> None:
         self.date_file.write_text(day.strftime("%b %d, %Y"))
 
-    def _result(self, day: date, image_path: Path) -> PeanutGalleryResult:
+    def _result(self, source: GoComicsSource, day: date, image_path: Path) -> PeanutGalleryResult:
         return PeanutGalleryResult(
             day=day,
             image_path=image_path,
             image_url=self._public_url_for(image_path),
             date_text=day.strftime("%b %d, %Y"),
             queue_size=len(self._load_queue()),
+            slug=source.slug,
         )
 
     def refill(self) -> int:
+        source = self.source
         queue = self._load_queue()
         queued = set(queue)
 
         attempts = 0
         while len(queue) < self.cache_size and attempts < 200:
             attempts += 1
-            day = self._pick_random_day()
+            day = self._pick_random_day(source)
             key = day.isoformat()
 
             if key in queued:
                 continue
 
             try:
-                self._fetch_day(day)
+                self._fetch_day(source, day)
                 queue.append(key)
                 queued.add(key)
             except Exception:
@@ -216,27 +249,55 @@ class PeanutGalleryClient:
         self._save_queue(queue)
         return len(queue)
 
-    def serve_day(self, day: date) -> PeanutGalleryResult:
-        image_path = self._fetch_day(day)
+    def serve_day(self, day: date, source_url: str | None = None) -> PeanutGalleryResult:
+        source = self._source(source_url)
+        image_path = self._fetch_day(source, day)
         self._save_current_date(day)
-        return self._result(day, image_path)
+        return self._result(source, day, image_path)
 
-    def serve_today(self) -> PeanutGalleryResult:
-        return self.serve_day(date.today())
+    def serve_today(self, source_url: str | None = None) -> PeanutGalleryResult:
+        return self.serve_day(date.today(), source_url)
 
-    def serve_random(self) -> PeanutGalleryResult:
-        queue = self._load_queue()
-
-        if queue:
-            day_str = queue.pop(0)
-            self._save_queue(queue)
-            return self.serve_day(date.fromisoformat(day_str))
+    def serve_random(self, source_url: str | None = None) -> PeanutGalleryResult:
+        source = self._source(source_url)
 
         for _ in range(25):
-            day = self._pick_random_day()
+            day = self._pick_random_day(source)
             try:
-                return self.serve_day(day)
+                return self.serve_day(day, source_url)
             except Exception:
                 continue
 
-        raise RuntimeError("Queue is empty and direct random fetch failed")
+        raise RuntimeError("Direct random fetch failed")
+
+    def archive_day_range(self, source_url: str | None, start: date, end: date, max_items: int = 250) -> dict:
+        source = self._source(source_url)
+        current = max(start, source.start_date)
+        downloaded = 0
+        skipped = 0
+        failed = 0
+        last_error = None
+
+        while current <= end and downloaded + skipped + failed < max_items:
+            try:
+                path = self._archive_path_for(source, current)
+                if path.exists() and path.stat().st_size > MIN_IMAGE_BYTES:
+                    skipped += 1
+                else:
+                    self._fetch_day(source, current)
+                    downloaded += 1
+            except Exception as err:
+                failed += 1
+                last_error = str(err)
+
+            current += timedelta(days=1)
+            time.sleep(2)
+
+        return {
+            "slug": source.slug,
+            "next_date": current.isoformat(),
+            "downloaded": downloaded,
+            "skipped": skipped,
+            "failed": failed,
+            "last_error": last_error,
+        }
