@@ -70,6 +70,19 @@ class PeanutGalleryCard extends HTMLElement {
     }
   }
 
+  sourceStartDateFromUrl(sourceUrl = this.config.source_url) {
+    try {
+      const url = new URL(sourceUrl);
+      const parts = url.pathname.split("/").filter(Boolean);
+      if (parts.length >= 4) return `${parts[1]}-${parts[2]}-${parts[3]}`;
+    } catch {
+      // Fall through to configured fallback.
+    }
+    return this.config.start_date || "1950-10-02";
+  }
+
+  datePickerMin() { return this.sourceStartDateFromUrl(); }
+  datePickerMax() { return this.config.archive_end_date || this.todayIso(); }
   defaultCardId() { return `${this.sourceSlugFromUrl()}_main`; }
 
   sameDateStorageKeyFor(cardId) {
@@ -363,7 +376,7 @@ class PeanutGalleryCard extends HTMLElement {
           <div class="menu-panel">
             <a class="menu-action open-image" target="_blank" rel="noopener noreferrer" title="Open image"><ha-icon icon="mdi:open-in-new"></ha-icon></a>
             <button class="menu-action same-date-toggle" type="button" title="Same-date shuffle"><ha-icon icon="mdi:calendar-lock"></ha-icon></button>
-            <label class="menu-action time-machine" title="Time machine"><ha-icon icon="mdi:history"></ha-icon><input class="date-picker" type="date" min="${this.config.start_date}" max="${this.todayIso()}" /></label>
+            <label class="menu-action time-machine" title="Time machine"><ha-icon icon="mdi:history"></ha-icon><input class="date-picker" type="date" min="${this.datePickerMin()}" max="${this.datePickerMax()}" /></label>
           </div>
         </details>
       </ha-card>
