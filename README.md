@@ -1,14 +1,15 @@
 # Peanut Gallery
 
-Peanut Gallery is a Home Assistant custom integration and Lovelace card for reading GoComics strips from inside a dashboard.
+Peanut Gallery is a Home Assistant custom integration and Lovelace card for displaying and archiving GoComics comics.
 
-It was built for Peanuts, but the card can work with other GoComics comic URLs too, such as Garfield, as long as you provide the comic's first-published GoComics URL.
+It started as a Peanuts card, but the goal is broader: one dashboard card that can work with any GoComics comic by using that comic's first-published GoComics URL. The project is structured with future source websites in mind, but GoComics is the only supported source right now.
 
-This is an unofficial personal-use integration. It reads GoComics pages and saves images locally, so it may break if GoComics changes its page markup. Use a reasonable download rate.
+This is an unofficial personal-use integration. It reads GoComics pages and saves images locally, so it may break if GoComics changes its page markup. Use a reasonable download rate and respect the source site.
 
 ## Features
 
 - Custom Lovelace card: `custom:peanut-gallery-card`
+- Works with GoComics source URLs such as Peanuts, Garfield, and other GoComics comics
 - Card-specific comic source URLs
 - Card-specific IDs, so multiple cards can behave independently
 - Today, shuffle, date picker, and open-image controls
@@ -16,7 +17,8 @@ This is an unofficial personal-use integration. It reads GoComics pages and save
 - Hide/show controls by tapping the comic
 - Local archive storage under `/config/www/gocomics/<comic>/<year>/<month>/`
 - Random shuffle prefers local archived files
-- Optional archive end date, useful for finished comics like Peanuts
+- Optional archive end date for finished comic runs or curated archives
+- Monthly random-year daily mode for seasonal finished archives
 - Same-date shuffle toggle for holidays and recurring calendar dates
 - Native mobile date picker for Time Machine
 - Archive progress sensor
@@ -63,17 +65,24 @@ JavaScript module
 
 After saving, hard-refresh the dashboard or restart Home Assistant.
 
-## Basic card
+## Basic cards
+
+### Finished archive example: Peanuts
+
+Peanuts has a finished original run, so this card caps the archive at the final original strip and uses `monthly_random_year` for Today.
 
 ```yaml
 type: custom:peanut-gallery-card
 card_id: peanuts_main
 source_url: "https://www.gocomics.com/peanuts/1950/10/02"
 archive_end_date: "2000-02-13"
+daily_mode: monthly_random_year
 auto_today_minutes: 30
 ```
 
-For Garfield:
+### Ongoing comic example: Garfield
+
+Garfield is ongoing, so this example does not set an archive end date or special daily mode.
 
 ```yaml
 type: custom:peanut-gallery-card
@@ -88,11 +97,54 @@ auto_today_minutes: 30
 |---|---|---|
 | `card_id` | `peanuts_main` | Unique ID for this card instance. Use a different ID for each independent card. |
 | `source_url` | `https://www.gocomics.com/peanuts/1950/10/02` | First-published GoComics URL. The integration extracts the comic slug and start date from this. |
-| `archive_end_date` | `2000-02-13` | Optional final archive date. For Peanuts, this prevents downloading post-2000 reruns. |
+| `archive_end_date` | `2000-02-13` | Optional final archive date. Useful for finished runs or avoiding modern rerun pages. |
+| `daily_mode` | `monthly_random_year` | Optional Today behavior. See daily modes below. |
 | `auto_today_minutes` | `30` | After shuffle/date use, return to Today after this many minutes. Use `0` to disable. |
 | `auto_load_today` | `true` | If no comic is loaded for this card, automatically load Today. |
 | `same_date_shuffle` | `false` | Initial same-date shuffle state. The UI toggle remembers its state per `card_id` in the browser. |
 | `action_timeout_seconds` | `75` | Prevents the card from staying disabled forever if a request hangs. |
+
+## Daily modes
+
+### Default / live date
+
+If no `daily_mode` is set, Today requests the comic for the current calendar date from the source.
+
+This is best for ongoing comics.
+
+### `monthly_random_year`
+
+```yaml
+daily_mode: monthly_random_year
+```
+
+This mode is intended for finished archives, especially comics where you do not want to collect modern rerun pages.
+
+On the first Today request for a card/month, the integration chooses one archived year whose month starts on the same weekday as the current month. It saves that chosen year in:
+
+```text
+/config/peanut_gallery_daily_state.json
+```
+
+For the rest of the month, Today maps the current month/day onto that chosen archive year.
+
+Example:
+
+```text
+Current date: 2026-12-25
+Chosen December archive year: 1987
+Displayed comic: 1987-12-25
+```
+
+This keeps weekday alignment and seasonality while avoiding duplicate post-run reruns.
+
+Fallbacks, in order:
+
+1. exact chosen-year date if locally archived
+2. same month + same Sunday/non-Sunday type
+3. any archived Sunday/non-Sunday type
+4. any archived local comic
+5. live Today fetch if no local fallback exists
 
 ## Card controls
 
@@ -129,6 +181,8 @@ action: peanut_gallery.today
 data:
   card_id: peanuts_main
   source_url: "https://www.gocomics.com/peanuts/1950/10/02"
+  archive_end_date: "2000-02-13"
+  daily_mode: monthly_random_year
 ```
 
 ### Random
@@ -252,22 +306,30 @@ instances:
 
 The archive sensor exposes archive progress under `attributes.sources`.
 
-## Notes for Peanuts
+## Notes for finished comics
 
-Peanuts started daily publication on `1950-10-02`.
+For a finished comic, set `archive_end_date` so the archive does not continue into reruns, reposts, or unrelated modern publication dates.
 
-The original run ended with the final Sunday strip on `2000-02-13`.
-
-Early Peanuts Sundays may show as missing because Sunday Peanuts did not exist yet. Those missing early Sundays are expected and are not the same as network or rate-limit errors.
-
-Use this for a clean original Peanuts archive:
+For Peanuts:
 
 ```yaml
 source_url: "https://www.gocomics.com/peanuts/1950/10/02"
 archive_end_date: "2000-02-13"
+daily_mode: monthly_random_year
 ```
 
-Without `archive_end_date`, GoComics dates after 2000 may be reruns/reprints rather than new original Peanuts strips.
+Early Peanuts Sundays may show as missing because Sunday Peanuts did not exist yet. Those missing early Sundays are expected and are not the same as network or rate-limit errors.
+
+## Future source support
+
+The current implementation supports GoComics only.
+
+The card and archive folder structure are intentionally generic enough to support other comic sources later. Future source support should keep the same card-facing ideas:
+
+- source URL identifies the comic
+- local archive files are stored by comic/date
+- cards display by `card_id`
+- source-specific scraping stays in backend code
 
 ## Troubleshooting
 
@@ -294,7 +356,7 @@ Most users should not need this. It is only useful if the browser is stuck on an
 Change the resource URL to include a version query, for example:
 
 ```text
-/peanut_gallery_static/peanut-gallery-card.js?v=0.3.9
+/peanut_gallery_static/peanut-gallery-card.js?v=0.4.0
 ```
 
 ### Check archive progress from terminal
