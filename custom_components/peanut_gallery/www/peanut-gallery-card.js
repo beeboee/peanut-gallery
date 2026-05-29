@@ -11,6 +11,7 @@ class PeanutGalleryCard extends HTMLElement {
       fallback_image: "",
       start_date: "1950-10-02",
       archive_end_date: "",
+      daily_mode: "",
       show_today_label: true,
       auto_today_minutes: 30,
       auto_load_today: true,
@@ -38,6 +39,7 @@ class PeanutGalleryCard extends HTMLElement {
       card_id: "peanuts_main",
       source_url: "https://www.gocomics.com/peanuts/1950/10/02",
       archive_end_date: "2000-02-13",
+      daily_mode: "monthly_random_year",
       auto_today_minutes: 30,
       auto_load_today: true,
     };
@@ -103,6 +105,7 @@ class PeanutGalleryCard extends HTMLElement {
     if (this.config.source_url) data.source_url = this.config.source_url;
     if (this.config.card_id) data.card_id = this.config.card_id;
     if (this.config.archive_end_date) data.archive_end_date = this.config.archive_end_date;
+    if (this.config.daily_mode) data.daily_mode = this.config.daily_mode;
     return data;
   }
 
@@ -407,12 +410,13 @@ class PeanutGalleryCardEditor extends HTMLElement {
       <style>
         .editor { display: grid; gap: 12px; }
         label { display: grid; gap: 4px; font-size: 14px; }
-        input { box-sizing: border-box; width: 100%; padding: 8px; border: 1px solid var(--divider-color); border-radius: 4px; background: var(--card-background-color); color: var(--primary-text-color); }
+        input, select { box-sizing: border-box; width: 100%; padding: 8px; border: 1px solid var(--divider-color); border-radius: 4px; background: var(--card-background-color); color: var(--primary-text-color); }
       </style>
       <div class="editor">
         <label>Card ID<input class="card-id" value="${this.value("card_id")}" placeholder="peanuts_main"></label>
         <label>First published GoComics URL<input class="source-url" value="${this.value("source_url", "https://www.gocomics.com/peanuts/1950/10/02")}" placeholder="https://www.gocomics.com/peanuts/1950/10/02"></label>
         <label>Archive end date<input class="archive-end" type="date" value="${this.value("archive_end_date", "")}"></label>
+        <label>Daily mode<select class="daily-mode"><option value="">Live date / default</option><option value="monthly_random_year" ${this.value("daily_mode") === "monthly_random_year" ? "selected" : ""}>Monthly random year</option></select></label>
         <label>Auto-return to Today minutes<input class="auto-today" type="number" min="0" value="${this.value("auto_today_minutes", 30)}"></label>
         <label>Action timeout seconds<input class="action-timeout" type="number" min="0" value="${this.value("action_timeout_seconds", 75)}"></label>
       </div>
@@ -421,6 +425,7 @@ class PeanutGalleryCardEditor extends HTMLElement {
     this.shadowRoot.querySelector(".card-id").addEventListener("change", (event) => this.updateValue("card_id", event.currentTarget.value.trim()));
     this.shadowRoot.querySelector(".source-url").addEventListener("change", (event) => this.updateValue("source_url", event.currentTarget.value.trim()));
     this.shadowRoot.querySelector(".archive-end").addEventListener("change", (event) => this.updateValue("archive_end_date", event.currentTarget.value.trim()));
+    this.shadowRoot.querySelector(".daily-mode").addEventListener("change", (event) => this.updateValue("daily_mode", event.currentTarget.value));
     this.shadowRoot.querySelector(".auto-today").addEventListener("change", (event) => this.updateValue("auto_today_minutes", Number(event.currentTarget.value || 0)));
     this.shadowRoot.querySelector(".action-timeout").addEventListener("change", (event) => this.updateValue("action_timeout_seconds", Number(event.currentTarget.value || 0)));
   }
