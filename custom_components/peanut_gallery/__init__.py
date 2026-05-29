@@ -15,6 +15,7 @@ from .comic import PeanutGalleryClient, PeanutGalleryResult
 from .const import (
     CONF_CACHE_DIR,
     CONF_CACHE_SIZE,
+    CONF_CARD_ID,
     CONF_CURRENT_IMAGE,
     CONF_DATE_FILE,
     CONF_QUEUE_FILE,
@@ -38,6 +39,7 @@ from .const import (
 PLATFORMS = ["sensor"]
 FRONTEND_URL = f"/{DOMAIN}_static"
 SOURCE_FIELD = vol.Optional(CONF_SOURCE_URL)
+CARD_ID_FIELD = vol.Optional(CONF_CARD_ID)
 
 
 def _parse_start_date(value: str) -> date:
@@ -73,19 +75,21 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     hass.data[DOMAIN]["frontend_registered"] = True
 
 
-def _store_result(hass: HomeAssistant, result: PeanutGalleryResult) -> None:
+def _store_result(hass: HomeAssistant, result: PeanutGalleryResult, card_id: str | None) -> None:
+    instance_id = card_id or result.slug
     hass.data[DOMAIN]["last_result"] = result
     hass.data[DOMAIN].setdefault("results", {})[result.slug] = result
+    hass.data[DOMAIN].setdefault("instances", {})[instance_id] = result
 
 
 async def _async_register_services(hass: HomeAssistant) -> None:
     if hass.data[DOMAIN].get("services_registered"):
         return
 
-    async def _run_and_update(func) -> PeanutGalleryResult | None:
+    async def _run_and_update(func, card_id: str | None = None) -> PeanutGalleryResult | None:
         result = await hass.async_add_executor_job(func)
         if isinstance(result, PeanutGalleryResult):
-            _store_result(hass, result)
+            _store_result(hass, result, card_id)
         async_dispatcher_send(hass, SIGNAL_UPDATED)
         return result
 
@@ -99,41 +103,45 @@ async def _async_register_services(hass: HomeAssistant) -> None:
     async def handle_today(call: ServiceCall) -> None:
         client = hass.data[DOMAIN]["client"]
         source_url = call.data.get(CONF_SOURCE_URL)
-        await _run_and_update(lambda: client.serve_today(source_url))
+        card_id = call.data.get(CONF_CARD_ID)
+        await _run_and_update(lambda: client.serve_today(source_url), card_id)
 
     async def handle_random(call: ServiceCall) -> None:
         client = hass.data[DOMAIN]["client"]
         source_url = call.data.get(CONF_SOURCE_URL)
-        await _run_and_update(lambda: client.serve_random(source_url))
+        card_id = call.data.get(CONF_CARD_ID)
+        await _run_and_update(lambda: client.serve_random(source_url), card_id)
         asyncio.create_task(_refill_in_background(client))
 
     async def handle_date(call: ServiceCall) -> None:
         client = hass.data[DOMAIN]["client"]
         day = date.fromisoformat(call.data["date"])
         source_url = call.data.get(CONF_SOURCE_URL)
-        await _run_and_update(lambda: client.serve_day(day, source_url))
+        card_id = call.data.get(CONF_CARD_ID)
+        await _run_and_update(lambda: client.serve_day(day, source_url), card_id)
 
     async def handle_refill(call: ServiceCall) -> None:
         client = hass.data[DOMAIN]["client"]
         await _run_and_update(client.refill)
 
+    optional_fields = {SOURCE_FIELD: cv.string, CARD_ID_FIELD: cv.string}
     hass.services.async_register(
         DOMAIN,
         SERVICE_TODAY,
         handle_today,
-        schema=vol.Schema({SOURCE_FIELD: cv.string}),
+        schema=vol.Schema(optional_fields),
     )
     hass.services.async_register(
         DOMAIN,
         SERVICE_RANDOM,
         handle_random,
-        schema=vol.Schema({SOURCE_FIELD: cv.string}),
+        schema=vol.Schema(optional_fields),
     )
     hass.services.async_register(
         DOMAIN,
         SERVICE_DATE,
         handle_date,
-        schema=vol.Schema({vol.Required("date"): cv.string, SOURCE_FIELD: cv.string}),
+        schema=vol.Schema({vol.Required("date"): cv.string, **optional_fields}),
     )
     hass.services.async_register(DOMAIN, SERVICE_REFILL, handle_refill)
     hass.data[DOMAIN]["services_registered"] = True
@@ -151,6 +159,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN]["client"] = _build_client(hass, data)
     hass.data[DOMAIN].setdefault("last_result", None)
     hass.data[DOMAIN].setdefault("results", {})
+    hass.data[DOMAIN].setdefault("instances", {})
 
     await _async_register_frontend(hass)
     await _async_register_services(hass)
