@@ -8,32 +8,26 @@ This project is unofficial and is not affiliated with GoComics or any comic publ
 
 ## Frontend features
 
-These are the card and dashboard features most users will interact with day to day.
-
-- Lovelace card: `custom:peanut-gallery-card`
-- GoComics support using a comic's first published URL
-- Multiple independent cards with `card_id`
-- Today, random, specific-date, and open-image controls
-- Tap the comic to hide or show controls
-- Same-date shuffle toggle for fixed calendar dates
-- Native mobile-friendly date picker
-- Date picker range limits from first published date to archive end date or today
-- Monthly random-year daily mode for archive-based daily reading
-- Card visual editor support
+- **One card, many comics** — point each card at a GoComics start URL.
+- **Independent panels** — separate cards stay separate with `card_id`.
+- **Today button** — load the live date or an archive-based daily pick.
+- **Archive shuffle** — browse saved comics without re-fetching every click.
+- **Date-lock shuffle** — randomize only the current month/day across years.
+- **Time Machine** — native date picker with publish-range limits.
+- **Clean reading mode** — tap the comic to hide or show controls.
+- **Mobile-friendly controls** — Today, Shuffle, Open, and Date in one card.
+- **Visual editor support** — configure the card without hand-editing everything.
 
 <details>
 <summary>Backend functions</summary>
 
-These are the integration-side pieces that support the card.
-
-- Local archive storage under `/config/www/gocomics/`
-- Archive progress tracking
-- Batch archive service with saved crawl position
-- Optional archive end date for finite runs or curated collections
-- Per-card image state through sensor attributes
-- Per-card monthly daily-mode state
-- Local file serving through Home Assistant's `/local/` path
-- Current source support: GoComics
+- **Local archive** — saves images under `/config/www/gocomics/`.
+- **Batch crawler** — downloads in small chunks instead of one giant run.
+- **Resume-safe progress** — keeps its place across restarts.
+- **Archive caps** — optional end dates for finite runs or curated sets.
+- **Per-card state** — tracks current images and monthly archive picks by `card_id`.
+- **Home Assistant sensors** — exposes date, image URL, queue size, and archive status.
+- **Source-ready shape** — GoComics now, room for more sources later.
 
 </details>
 
