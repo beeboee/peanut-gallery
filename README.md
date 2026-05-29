@@ -8,26 +8,20 @@ This project is unofficial and is not affiliated with GoComics or any comic publ
 
 ## Features
 
-- **One card, many comics** — point each card at its own GoComics URL.
-- **Independent panels** — group or seperate cards by giving them the same or different `card_id`.
-- **Today button** — load the live date or an archive-based daily pick.
-- **Archive shuffle** — browse saved comics without re-fetching every click.
-- **Date-lock shuffle** — Shuffle through todays comics of yester-year.
-- **Time Machine** — native date picker with publish-range limits.
-- **Clean reading mode** — tap the comic to hide or show controls.
-- **Mobile-friendly controls** — Today, Shuffle, Open, and Date in one card.
-- **Visual editor support** — configure the card without hand-editing everything.
+- **Comic cards for Home Assistant** — readable web comics directly in Lovelace.
+- **Local comic archive** — save strips into `/config/www/gocomics/` for fast browsing.
+- **Archive shuffle** — randomize through saved comics without hammering the source site.
+- **Date-lock shuffle** — jump through the same calendar date across different years.
+- **Archive daily mode** — pick a matching archive year each month and read it day by day.
+- **Time Machine** — choose a specific strip by date, limited to the comic's publish range.
 
 <details>
 <summary>Backend functions</summary>
 
-- **Local archive** — saves images under `/config/www/gocomics/`.
-- **Batch crawler** — downloads in small, variable chunks instead of one giant run.
-- **Resume-safe progress** — keeps its place across restarts.
-- **Archive caps** — optional end dates for finite runs or curated sets.
-- **Per-card state** — tracks current images and monthly archive picks by `card_id`.
-- **Home Assistant sensors** — exposes date, image URL, queue size, and archive status.
-- **Source-ready shape** — GoComics now, room for more sources later.
+- **Batch archive service** — crawl a comic gradually with configurable batch size and delay.
+- **Archive caps** — stop at a chosen end date for finite runs or curated sets.
+- **Archive status sensor** — expose date, image URL, queue size, and archive progress in Home Assistant.
+- **Source adapter path** — GoComics now, room for more sources later.
 
 </details>
 
