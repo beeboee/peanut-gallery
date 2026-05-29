@@ -1,24 +1,33 @@
 # Peanut Gallery
 
-A small Home Assistant custom integration for showing Peanuts comics from GoComics.
+Peanut Gallery is a Home Assistant custom integration and Lovelace card for reading GoComics strips from inside a dashboard.
 
-It can:
+It was built for Peanuts, but the card can work with other GoComics comic URLs too, such as Garfield, as long as you provide the comic's first-published GoComics URL.
 
-- download today's comic
-- download a specific dated comic
-- keep a small random-comic queue
-- expose the current comic date and image URL as sensors
-- save the current comic image under `/config/www/peanut_gallery/peanuts.jpg`
+This is an unofficial personal-use integration. It reads GoComics pages and saves images locally, so it may break if GoComics changes its page markup. Use a reasonable download rate.
 
-This is an unofficial personal-use integration. It scrapes GoComics pages, so it may break if GoComics changes its page markup.
+## Features
 
-## Install with HACS
+- Custom Lovelace card: `custom:peanut-gallery-card`
+- Card-specific comic source URLs
+- Card-specific IDs, so multiple cards can behave independently
+- Today, shuffle, date picker, and open-image controls
+- Horizontal comic scrolling with pinned controls
+- Hide/show controls by tapping the comic
+- Local archive storage under `/config/www/gocomics/<comic>/<year>/<month>/`
+- Random shuffle prefers local archived files
+- Optional archive end date, useful for finished comics like Peanuts
+- Same-date shuffle toggle for holidays and recurring calendar dates
+- Native mobile date picker for Time Machine
+- Archive progress sensor
 
-1. Open HACS.
+## HACS install
+
+1. Open **HACS**.
 2. Go to **Integrations**.
 3. Open the three-dot menu.
 4. Choose **Custom repositories**.
-5. Add this repository URL:
+5. Add this repository:
 
    ```text
    https://github.com/beeboee/peanut-gallery
@@ -27,43 +36,119 @@ This is an unofficial personal-use integration. It scrapes GoComics pages, so it
 6. Category: **Integration**.
 7. Install **Peanut Gallery**.
 8. Restart Home Assistant.
+9. Go to **Settings → Devices & services → Add integration**.
+10. Search for **Peanut Gallery** and add it.
 
-## Configure
+## Add the Lovelace card resource
 
-Add this to `configuration.yaml`:
+Home Assistant also needs to load the card JavaScript as a dashboard resource.
 
-```yaml
-peanut_gallery:
+Go to:
+
+```text
+Settings → Dashboards → Resources → Add resource
 ```
 
-Optional full config:
+Add:
 
-```yaml
-peanut_gallery:
-  cache_size: 3
-  start_date: "1950-10-02"
-  cache_dir: "www/peanut_gallery/cache"
-  current_image: "www/peanut_gallery/peanuts.jpg"
-  date_file: "www/peanut_gallery/peanuts_date.txt"
-  queue_file: "peanut_gallery_queue.json"
+```text
+/peanut_gallery_static/peanut-gallery-card.js
 ```
 
-Restart Home Assistant after editing `configuration.yaml`.
+Resource type:
 
-You can also change these settings from the integration's **Configure** menu in Home Assistant. The repo already includes a config flow and options flow, so this is not limited to add-ons or apps.
+```text
+JavaScript module
+```
+
+After saving, hard-refresh the dashboard or restart Home Assistant.
+
+## Basic card
+
+```yaml
+type: custom:peanut-gallery-card
+card_id: peanuts_main
+source_url: "https://www.gocomics.com/peanuts/1950/10/02"
+archive_end_date: "2000-02-13"
+auto_today_minutes: 30
+```
+
+For Garfield:
+
+```yaml
+type: custom:peanut-gallery-card
+card_id: garfield_main
+source_url: "https://www.gocomics.com/garfield/1978/06/19"
+auto_today_minutes: 30
+```
+
+## Card options
+
+| Option | Example | What it does |
+|---|---|---|
+| `card_id` | `peanuts_main` | Unique ID for this card instance. Use a different ID for each independent card. |
+| `source_url` | `https://www.gocomics.com/peanuts/1950/10/02` | First-published GoComics URL. The integration extracts the comic slug and start date from this. |
+| `archive_end_date` | `2000-02-13` | Optional final archive date. For Peanuts, this prevents downloading post-2000 reruns. |
+| `auto_today_minutes` | `30` | After shuffle/date use, return to Today after this many minutes. Use `0` to disable. |
+| `auto_load_today` | `true` | If no comic is loaded for this card, automatically load Today. |
+| `same_date_shuffle` | `false` | Initial same-date shuffle state. The UI toggle remembers its state per `card_id` in the browser. |
+| `action_timeout_seconds` | `75` | Prevents the card from staying disabled forever if a request hangs. |
+
+## Card controls
+
+- **Calendar button**: load Today.
+- **Shuffle button**: pick a random local archived comic for this card's source.
+- **Three-dot menu**:
+  - open image in browser
+  - firework toggle for same-date shuffle
+  - Time Machine date picker
+
+### Same-date shuffle
+
+Same-date shuffle is useful for fixed-date holidays and seasonal dates.
+
+When enabled, Shuffle uses the displayed comic's month/day and chooses a random archived comic from that same month/day across years.
+
+Examples:
+
+- Feb 14 → random Valentine's Day strip from archived Feb 14 strips
+- Oct 31 → random Halloween strip from archived Oct 31 strips
+- Dec 25 → random Christmas strip from archived Dec 25 strips
+- Jan 1 → random New Year's Day strip from archived Jan 1 strips
+
+Same-date shuffle intentionally ignores weekday/Sunday matching.
+
+The toggle is stored per `card_id` in browser local storage, so `peanuts_main` and `garfield_main` remember separate states on the same device. This setting is not synced between browsers or phones.
 
 ## Services
 
-### Today's comic
+### Today
 
 ```yaml
 action: peanut_gallery.today
+data:
+  card_id: peanuts_main
+  source_url: "https://www.gocomics.com/peanuts/1950/10/02"
 ```
 
-### Random comic
+### Random
 
 ```yaml
 action: peanut_gallery.random
+data:
+  card_id: peanuts_main
+  source_url: "https://www.gocomics.com/peanuts/1950/10/02"
+```
+
+### Same-date random
+
+```yaml
+action: peanut_gallery.random
+data:
+  card_id: peanuts_main
+  source_url: "https://www.gocomics.com/peanuts/1950/10/02"
+  same_date: true
+  target_date: "2026-12-25"
 ```
 
 ### Specific date
@@ -71,14 +156,75 @@ action: peanut_gallery.random
 ```yaml
 action: peanut_gallery.date
 data:
+  card_id: peanuts_main
+  source_url: "https://www.gocomics.com/peanuts/1950/10/02"
   date: "1997-10-22"
 ```
 
-### Refill random cache
+### Archive step
+
+`archive_step` downloads a small batch and saves progress. Run it repeatedly with an automation to build a local archive.
 
 ```yaml
-action: peanut_gallery.refill
+action: peanut_gallery.archive_step
+data:
+  source_url: "https://www.gocomics.com/peanuts/1950/10/02"
+  archive_end_date: "2000-02-13"
+  max_items: 5
+  delay_seconds: 10
+  max_failures_per_date: 1
 ```
+
+`max_items` is the batch size per call, not the total archive size. The next call resumes from the saved `next_date`.
+
+## Archive automation example
+
+This archives Peanuts only, stopping at the final original strip.
+
+```yaml
+alias: Peanut Gallery Archive Grabber
+description: Slowly archive original Peanuts into /config/www/gocomics.
+mode: single
+
+trigger:
+  - platform: time_pattern
+    minutes: "/1"
+
+condition: []
+
+action:
+  - action: peanut_gallery.archive_step
+    data:
+      source_url: "https://www.gocomics.com/peanuts/1950/10/02"
+      archive_end_date: "2000-02-13"
+      max_items: 5
+      delay_seconds: 10
+      max_failures_per_date: 1
+```
+
+This is roughly 300 checked dates per hour when stable. If you see connection resets, increase `delay_seconds` or run the automation less often.
+
+## Local archive paths
+
+Files are stored as:
+
+```text
+/config/www/gocomics/<comic>/<year>/<month>/<comic>_<YYYY-MM-DD>.jpg
+```
+
+Example:
+
+```text
+/config/www/gocomics/peanuts/1950/10/peanuts_1950-10-02.jpg
+```
+
+In the browser, `/config/www` is exposed as `/local`, so that file is available at:
+
+```text
+/local/gocomics/peanuts/1950/10/peanuts_1950-10-02.jpg
+```
+
+Home Assistant does not show folder listings for `/local/` paths. Open a specific file URL or check the files from the terminal.
 
 ## Sensors
 
@@ -88,252 +234,101 @@ The integration creates:
 sensor.peanut_gallery_date
 sensor.peanut_gallery_image_url
 sensor.peanut_gallery_queue_size
+sensor.peanut_gallery_archive
 ```
 
-The image URL sensor points to the current saved comic image. By default that image is available at:
+The image sensor exposes per-card results under `attributes.instances`.
+
+Example shape:
+
+```yaml
+instances:
+  peanuts_main:
+    slug: peanuts
+    image_url: /local/gocomics/peanuts/1950/10/peanuts_1950-10-02.jpg?1950-10-02
+    date: "1950-10-02"
+    date_text: Oct 02, 1950
+```
+
+The archive sensor exposes archive progress under `attributes.sources`.
+
+## Notes for Peanuts
+
+Peanuts started daily publication on `1950-10-02`.
+
+The original run ended with the final Sunday strip on `2000-02-13`.
+
+Early Peanuts Sundays may show as missing because Sunday Peanuts did not exist yet. Those missing early Sundays are expected and are not the same as network or rate-limit errors.
+
+Use this for a clean original Peanuts archive:
+
+```yaml
+source_url: "https://www.gocomics.com/peanuts/1950/10/02"
+archive_end_date: "2000-02-13"
+```
+
+Without `archive_end_date`, GoComics dates after 2000 may be reruns/reprints rather than new original Peanuts strips.
+
+## Troubleshooting
+
+### Custom element does not exist
+
+Make sure the dashboard resource exists:
 
 ```text
-/local/peanut_gallery/peanuts.jpg
+/peanut_gallery_static/peanut-gallery-card.js
 ```
 
-## Example dashboard card
+Resource type must be:
 
-This card keeps the controls pinned to the visible comic window, not the comic image itself. The comic can be horizontally scrolled while the today, shuffle, and action-menu buttons stay visible.
-
-The bottom-right three-dot button opens a small action menu. The menu contains a download button and a **Time machine** date picker. On phones, the Time machine control uses the operating system's native date picker.
-
-```yaml
-type: custom:button-card
-entity: sensor.peanut_gallery_image_url
-show_name: false
-show_icon: false
-show_entity_picture: false
-grid_options:
-  columns: full
-styles:
-  card:
-    - padding: 0
-    - border-radius: 6px
-    - overflow: hidden
-    - width: 100%
-    - position: relative
-  grid:
-    - grid-template-areas: '"comic"'
-    - grid-template-columns: 1fr
-    - grid-template-rows: 1fr
-  custom_fields:
-    comic:
-      - width: 100%
-      - min-width: 0
-    today:
-      - position: absolute
-      - top: 8px
-      - left: 8px
-      - z-index: 5
-    shuffle:
-      - position: absolute
-      - top: 8px
-      - right: 8px
-      - z-index: 5
-    menu:
-      - position: absolute
-      - right: 8px
-      - bottom: 8px
-      - z-index: 5
-custom_fields:
-  comic: |
-    [[[
-      const src = states['sensor.peanut_gallery_image_url']?.state || '/local/peanut_gallery/peanuts.jpg';
-      const date = states['sensor.peanut_gallery_date']?.state || '';
-
-      return `
-        <div style="position: relative; width: 100%;">
-          <div style="
-            width: 100%;
-            overflow-x: auto;
-            overflow-y: hidden;
-            -webkit-overflow-scrolling: touch;
-            scrollbar-width: thin;
-          ">
-            <img
-              src="${src}"
-              style="
-                display: block;
-                height: auto;
-                width: 100%;
-                max-width: none;
-              "
-              onload="
-                const ratio = this.naturalWidth / this.naturalHeight;
-                this.style.width = ratio > 2.2 ? '280%' : '100%';
-              "
-            />
-          </div>
-          <div style="
-            position: absolute;
-            left: 8px;
-            bottom: 8px;
-            z-index: 4;
-            padding: 6px 10px;
-            border-radius: 999px;
-            background: rgba(0, 0, 0, 0.55);
-            color: white;
-            font-size: 13px;
-            line-height: 1;
-            pointer-events: none;
-          ">${date}</div>
-        </div>
-      `;
-    ]]]
-  today:
-    card:
-      type: custom:button-card
-      icon: mdi:calendar-today
-      show_name: false
-      tap_action:
-        action: perform-action
-        perform_action: peanut_gallery.today
-      styles:
-        card:
-          - width: 42px
-          - height: 42px
-          - border-radius: 999px
-          - background: rgba(0, 0, 0, 0.55)
-          - box-shadow: none
-          - backdrop-filter: blur(4px)
-        icon:
-          - color: white
-          - width: 24px
-  shuffle:
-    card:
-      type: custom:button-card
-      icon: mdi:shuffle-variant
-      show_name: false
-      tap_action:
-        action: perform-action
-        perform_action: peanut_gallery.random
-      styles:
-        card:
-          - width: 42px
-          - height: 42px
-          - border-radius: 999px
-          - background: rgba(0, 0, 0, 0.55)
-          - box-shadow: none
-          - backdrop-filter: blur(4px)
-        icon:
-          - color: white
-          - width: 24px
-  menu: |
-    [[[
-      const src = states['sensor.peanut_gallery_image_url']?.state || '/local/peanut_gallery/peanuts.jpg';
-      const currentDate = states['sensor.peanut_gallery_image_url']?.attributes?.date || '';
-      const startDate = '1950-10-02';
-      const now = new Date();
-      const localToday = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-      const dateValue = currentDate || localToday;
-
-      return `
-        <style>
-          .peanut-gallery-menu summary::-webkit-details-marker {
-            display: none;
-          }
-          .peanut-gallery-menu[open] summary {
-            display: none;
-          }
-          .peanut-gallery-panel {
-            display: flex;
-            flex-direction: column-reverse;
-            align-items: flex-end;
-            gap: 8px;
-          }
-          .peanut-gallery-trigger,
-          .peanut-gallery-action {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 42px;
-            height: 42px;
-            border-radius: 999px;
-            background: rgba(0, 0, 0, 0.55);
-            color: white;
-            text-decoration: none;
-            border: 0;
-            box-sizing: border-box;
-            backdrop-filter: blur(4px);
-          }
-          .peanut-gallery-trigger {
-            width: 42px;
-            list-style: none;
-            cursor: pointer;
-          }
-          .peanut-gallery-time-machine {
-            position: relative;
-            gap: 8px;
-            width: max-content;
-            padding: 0 14px;
-            font-size: 13px;
-            line-height: 1;
-            font-weight: 500;
-          }
-          .peanut-gallery-date-input {
-            position: absolute;
-            inset: 0;
-            width: 100%;
-            height: 100%;
-            opacity: 0;
-            cursor: pointer;
-          }
-        </style>
-        <details class="peanut-gallery-menu" onclick="event.stopPropagation();">
-          <summary class="peanut-gallery-trigger" aria-label="Comic actions">
-            <ha-icon icon="mdi:dots-horizontal" style="--mdc-icon-size: 24px;"></ha-icon>
-          </summary>
-          <div class="peanut-gallery-panel">
-            <a
-              class="peanut-gallery-action"
-              href="${src}"
-              download="peanuts-${dateValue}.jpg"
-              target="_blank"
-              aria-label="Download comic"
-              onclick="event.stopPropagation();"
-            >
-              <ha-icon icon="mdi:download" style="--mdc-icon-size: 24px;"></ha-icon>
-            </a>
-            <label class="peanut-gallery-action peanut-gallery-time-machine" aria-label="Pick comic date">
-              <ha-icon icon="mdi:calendar-search" style="--mdc-icon-size: 20px;"></ha-icon>
-              <span>Time machine</span>
-              <input
-                class="peanut-gallery-date-input"
-                type="date"
-                min="${startDate}"
-                max="${localToday}"
-                value="${dateValue}"
-                onclick="event.stopPropagation();"
-                onchange="event.stopPropagation(); const date = this.value; if (date) document.querySelector('home-assistant').hass.callService('peanut_gallery', 'date', { date });"
-              />
-            </label>
-          </div>
-        </details>
-      `;
-    ]]]
-tap_action:
-  action: none
+```text
+JavaScript module
 ```
 
-## Example automation
+Then hard-refresh the dashboard or restart Home Assistant.
 
-Refill the cache on Home Assistant start:
+### Cache-bust the card resource
 
-```yaml
-- alias: Refill Peanut Gallery Cache On Start
-  triggers:
-    - trigger: homeassistant
-      event: start
-  actions:
-    - action: peanut_gallery.refill
-  mode: single
+Most users should not need this. It is only useful if the browser is stuck on an old card file after an update.
+
+Change the resource URL to include a version query, for example:
+
+```text
+/peanut_gallery_static/peanut-gallery-card.js?v=0.3.9
 ```
 
-## Notes
+### Check archive progress from terminal
 
-Peanuts started publication on 1950-10-02, so the default random range starts there.
+```bash
+cat /config/peanut_gallery_archive_state.json
+```
+
+Count downloaded files:
+
+```bash
+find /config/www/gocomics/peanuts -type f | wc -l
+```
+
+### Browser URL for local files
+
+Use `/local/...`, not `/config/www/...`.
+
+Correct:
+
+```text
+http://ha.local:8123/local/gocomics/peanuts/1950/10/peanuts_1950-10-02.jpg
+```
+
+Wrong:
+
+```text
+http://ha.local:8123/config/www/gocomics/peanuts/1950/10/
+```
+
+## What still requires setup?
+
+Normal users should not need terminal commands.
+
+The only required setup outside HACS is adding the Lovelace resource so Home Assistant loads the custom card JavaScript. That can be done from the Home Assistant UI under **Settings → Dashboards → Resources**.
+
+The terminal commands used during development were mainly for cache-busting and debugging. They are not part of the normal install path.
