@@ -1,6 +1,7 @@
 class PeanutGalleryCard extends HTMLElement {
   setConfig(config) {
     this.config = {
+      source_url: "https://www.gocomics.com/peanuts/1950/10/02",
       image_entity: "sensor.peanut_gallery_image_url",
       date_entity: "sensor.peanut_gallery_date",
       today_action: "peanut_gallery.today",
@@ -40,6 +41,11 @@ class PeanutGalleryCard extends HTMLElement {
     return new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
       .toISOString()
       .slice(0, 10);
+  }
+  serviceData(extra = {}) {
+    const data = { ...extra };
+    if (this.config.source_url) data.source_url = this.config.source_url;
+    return data;
   }
 
   getImageEntity() {
@@ -190,16 +196,22 @@ class PeanutGalleryCard extends HTMLElement {
 
   showToday() {
     this.setDateLabel("Today");
-    return this.runAction("today", () => this.callAction(this.config.today_action));
+    return this.runAction("today", () =>
+      this.callAction(this.config.today_action, this.serviceData())
+    );
   }
-
+  
   showRandom() {
-    return this.runAction("random", () => this.callAction(this.config.random_action));
+    return this.runAction("random", () =>
+      this.callAction(this.config.random_action, this.serviceData())
+    );
   }
-
+  
   showDate(date) {
     if (!date) return Promise.resolve();
-    return this.runAction("date", () => this.callAction(this.config.date_action, { date }));
+    return this.runAction("date", () =>
+      this.callAction(this.config.date_action, this.serviceData({ date }))
+    );
   }
 
   renderBase() {
