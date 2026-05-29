@@ -148,7 +148,13 @@ class PeanutGalleryClient:
     def _save_archive_state(self, state: dict) -> None:
         self.archive_state_file.write_text(json.dumps(state, indent=2, sort_keys=True))
 
-    def archive_step(self, source_url: str | None = None, max_items: int = 5) -> dict:
+    def archive_step(
+        self,
+        source_url: str | None = None,
+        max_items: int = 5,
+        delay_seconds: float = 12.0,
+        max_failures_per_date: int = 3,
+    ) -> dict:
         source = self._source(source_url)
         state = self._load_archive_state()
         source_state = state.setdefault(source.slug, {})
@@ -158,6 +164,9 @@ class PeanutGalleryClient:
         )
         end = date.today()
 
+        failed_dates = source_state.setdefault("failed_dates", {})
+        skipped_failed_dates = source_state.setdefault("skipped_failed_dates", [])
+
         checked = 0
         saved = 0
         skipped = 0
@@ -166,6 +175,7 @@ class PeanutGalleryClient:
 
         while current <= end and checked < max_items:
             checked += 1
+            current_key = current.isoformat()
 
             try:
                 path = self._archive_path_for(source, current)
@@ -176,12 +186,25 @@ class PeanutGalleryClient:
                     self._fetch_day(source, current)
                     saved += 1
 
+                failed_dates.pop(current_key, None)
+                current += timedelta(days=1)
+
             except Exception as err:
                 failed += 1
                 last_error = str(err)
+
+                fail_count = int(failed_dates.get(current_key, 0)) + 1
+                failed_dates[current_key] = fail_count
+
+                if fail_count >= max_failures_per_date:
+                    if current_key not in skipped_failed_dates:
+                        skipped_failed_dates.append(current_key)
+                    current += timedelta(days=1)
+
                 break
 
-            current += timedelta(days=1)
+            if checked < max_items and current <= end and delay_seconds > 0:
+                time.sleep(delay_seconds)
 
         source_state["slug"] = source.slug
         source_state["next_date"] = current.isoformat()
