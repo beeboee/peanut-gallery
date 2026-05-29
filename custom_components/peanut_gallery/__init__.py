@@ -18,12 +18,14 @@ from .const import (
     CONF_CURRENT_IMAGE,
     CONF_DATE_FILE,
     CONF_QUEUE_FILE,
+    CONF_SOURCE_URL,
     CONF_START_DATE,
     DEFAULT_CACHE_DIR,
     DEFAULT_CACHE_SIZE,
     DEFAULT_CURRENT_IMAGE,
     DEFAULT_DATE_FILE,
     DEFAULT_QUEUE_FILE,
+    DEFAULT_SOURCE_URL,
     DEFAULT_START_DATE,
     DOMAIN,
     SERVICE_DATE,
@@ -35,6 +37,7 @@ from .const import (
 
 PLATFORMS = ["sensor"]
 FRONTEND_URL = f"/{DOMAIN}_static"
+SOURCE_SCHEMA = vol.Optional(CONF_SOURCE_URL): cv.string
 
 
 def _parse_start_date(value: str) -> date:
@@ -50,6 +53,7 @@ def _build_client(hass: HomeAssistant, data: dict) -> PeanutGalleryClient:
         queue_file=data.get(CONF_QUEUE_FILE, DEFAULT_QUEUE_FILE),
         cache_size=int(data.get(CONF_CACHE_SIZE, DEFAULT_CACHE_SIZE)),
         start_date=_parse_start_date(data.get(CONF_START_DATE, DEFAULT_START_DATE)),
+        source_url=data.get(CONF_SOURCE_URL, DEFAULT_SOURCE_URL),
     )
 
 
@@ -85,34 +89,46 @@ async def _async_register_services(hass: HomeAssistant) -> None:
             await hass.async_add_executor_job(client.refill)
             async_dispatcher_send(hass, SIGNAL_UPDATED)
         except Exception:
-            # Random display should not fail just because background refill failed.
             return
 
     async def handle_today(call: ServiceCall) -> None:
         client = hass.data[DOMAIN]["client"]
-        await _run_and_update(client.serve_today)
+        source_url = call.data.get(CONF_SOURCE_URL)
+        await _run_and_update(lambda: client.serve_today(source_url))
 
     async def handle_random(call: ServiceCall) -> None:
         client = hass.data[DOMAIN]["client"]
-        await _run_and_update(client.serve_random)
+        source_url = call.data.get(CONF_SOURCE_URL)
+        await _run_and_update(lambda: client.serve_random(source_url))
         asyncio.create_task(_refill_in_background(client))
 
     async def handle_date(call: ServiceCall) -> None:
         client = hass.data[DOMAIN]["client"]
         day = date.fromisoformat(call.data["date"])
-        await _run_and_update(lambda: client.serve_day(day))
+        source_url = call.data.get(CONF_SOURCE_URL)
+        await _run_and_update(lambda: client.serve_day(day, source_url))
 
     async def handle_refill(call: ServiceCall) -> None:
         client = hass.data[DOMAIN]["client"]
         await _run_and_update(client.refill)
 
-    hass.services.async_register(DOMAIN, SERVICE_TODAY, handle_today)
-    hass.services.async_register(DOMAIN, SERVICE_RANDOM, handle_random)
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_TODAY,
+        handle_today,
+        schema=vol.Schema({SOURCE_SCHEMA}),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_RANDOM,
+        handle_random,
+        schema=vol.Schema({SOURCE_SCHEMA}),
+    )
     hass.services.async_register(
         DOMAIN,
         SERVICE_DATE,
         handle_date,
-        schema=vol.Schema({vol.Required("date"): cv.string}),
+        schema=vol.Schema({vol.Required("date"): cv.string, SOURCE_SCHEMA}),
     )
     hass.services.async_register(DOMAIN, SERVICE_REFILL, handle_refill)
     hass.data[DOMAIN]["services_registered"] = True
