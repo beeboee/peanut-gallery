@@ -10,10 +10,12 @@ class PeanutGalleryCard extends HTMLElement {
       date_action: "peanut_gallery.date",
       fallback_image: "",
       start_date: "1950-10-02",
+      archive_end_date: "",
       show_today_label: true,
       auto_today_minutes: 30,
       auto_load_today: true,
       action_timeout_seconds: 75,
+      same_date_shuffle: false,
       ...config,
     };
 
@@ -21,6 +23,7 @@ class PeanutGalleryCard extends HTMLElement {
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
 
     this.controlsVisible = true;
+    this.sameDateShuffle = Boolean(this.config.same_date_shuffle);
     this.lastImageSrc = "";
     this.lastDateLabel = "";
     this.actionInProgress = false;
@@ -33,6 +36,7 @@ class PeanutGalleryCard extends HTMLElement {
     return {
       card_id: "peanuts_main",
       source_url: "https://www.gocomics.com/peanuts/1950/10/02",
+      archive_end_date: "2000-02-13",
       auto_today_minutes: 30,
       auto_load_today: true,
     };
@@ -63,9 +67,7 @@ class PeanutGalleryCard extends HTMLElement {
     }
   }
 
-  defaultCardId() {
-    return `${this.sourceSlugFromUrl()}_main`;
-  }
+  defaultCardId() { return `${this.sourceSlugFromUrl()}_main`; }
 
   instanceData() {
     const entity = this._hass?.states?.[this.config.image_entity];
@@ -76,6 +78,7 @@ class PeanutGalleryCard extends HTMLElement {
     const data = { ...extra };
     if (this.config.source_url) data.source_url = this.config.source_url;
     if (this.config.card_id) data.card_id = this.config.card_id;
+    if (this.config.archive_end_date) data.archive_end_date = this.config.archive_end_date;
     return data;
   }
 
@@ -112,6 +115,10 @@ class PeanutGalleryCard extends HTMLElement {
     return isoDate || "";
   }
 
+  targetDateForShuffle() {
+    return this.getIsoDate() || this.todayIso();
+  }
+
   updateFromHass() {
     if (!this.shadowRoot || !this._hass) return;
     const imageSrc = this.getImageSrc();
@@ -130,6 +137,7 @@ class PeanutGalleryCard extends HTMLElement {
     }
 
     this.maybeAutoLoadToday(imageSrc);
+    this.updateSameDateButton();
   }
 
   maybeAutoLoadToday(imageSrc) {
@@ -244,8 +252,14 @@ class PeanutGalleryCard extends HTMLElement {
   }
 
   showRandom() {
+    const data = this.serviceData();
+    if (this.sameDateShuffle) {
+      data.same_date = true;
+      data.target_date = this.targetDateForShuffle();
+    }
+
     return this.runAction("random", async () => {
-      await this.callAction(this.config.random_action, this.serviceData());
+      await this.callAction(this.config.random_action, data);
       this.scheduleAutoToday();
     });
   }
@@ -256,6 +270,18 @@ class PeanutGalleryCard extends HTMLElement {
       await this.callAction(this.config.date_action, this.serviceData({ date }));
       this.scheduleAutoToday();
     });
+  }
+
+  toggleSameDateShuffle() {
+    this.sameDateShuffle = !this.sameDateShuffle;
+    this.updateSameDateButton();
+  }
+
+  updateSameDateButton() {
+    const button = this.$(".same-date-toggle");
+    if (!button) return;
+    button.classList.toggle("active", this.sameDateShuffle);
+    button.title = this.sameDateShuffle ? "Same-date shuffle on" : "Same-date shuffle off";
   }
 
   renderBase() {
@@ -273,81 +299,15 @@ class PeanutGalleryCard extends HTMLElement {
           opacity: 0.6;
         }
 
-        ha-card {
-          position: relative;
-          overflow: hidden;
-          border-radius: 6px;
-          padding: 0;
-        }
-
-        .comic-scroll {
-          width: 100%;
-          overflow-x: auto;
-          overflow-y: hidden;
-          -webkit-overflow-scrolling: touch;
-          scrollbar-width: thin;
-        }
-
-        .comic-scroll[hidden],
-        .placeholder[hidden] {
-          display: none !important;
-        }
-
-        img {
-          display: block;
-          width: 100%;
-          height: auto;
-          max-width: none;
-          cursor: pointer;
-        }
-
-        .placeholder {
-          height: 300px;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 12px;
-          color: var(--secondary-text-color);
-          background: var(--ha-card-background, var(--card-background-color, white));
-          cursor: default;
-        }
-
-        .placeholder ha-icon {
-          --mdc-icon-size: 56px;
-          opacity: 0.75;
-        }
-
-        .placeholder-button {
-          border: 0;
-          border-radius: 999px;
-          padding: 8px 16px;
-          background: rgba(0, 0, 0, 0.55);
-          color: white;
-          cursor: pointer;
-          font: inherit;
-        }
-
-        .overlay-button,
-        .menu-action,
-        .menu-summary {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 42px;
-          height: 42px;
-          border: 0;
-          border-radius: 999px;
-          background: rgba(0, 0, 0, 0.55);
-          color: white;
-          box-shadow: none;
-          cursor: pointer;
-          text-decoration: none;
-          backdrop-filter: blur(4px);
-          -webkit-backdrop-filter: blur(4px);
-          box-sizing: border-box;
-        }
-
+        ha-card { position: relative; overflow: hidden; border-radius: 6px; padding: 0; }
+        .comic-scroll { width: 100%; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+        .comic-scroll[hidden], .placeholder[hidden] { display: none !important; }
+        img { display: block; width: 100%; height: auto; max-width: none; cursor: pointer; }
+        .placeholder { height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--secondary-text-color); background: var(--ha-card-background, var(--card-background-color, white)); cursor: default; }
+        .placeholder ha-icon { --mdc-icon-size: 56px; opacity: 0.75; }
+        .placeholder-button { border: 0; border-radius: 999px; padding: 8px 16px; background: rgba(0, 0, 0, 0.55); color: white; cursor: pointer; font: inherit; }
+        .overlay-button, .menu-action, .menu-summary { display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border: 0; border-radius: 999px; background: rgba(0, 0, 0, 0.55); color: white; box-shadow: none; cursor: pointer; text-decoration: none; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); box-sizing: border-box; }
+        .menu-action.active { background: rgba(255, 255, 255, 0.72); color: black; }
         .today { position: absolute; top: 8px; left: 8px; z-index: 5; }
         .shuffle { position: absolute; top: 8px; right: 8px; z-index: 5; }
         .date-label { position: absolute; left: 8px; bottom: 8px; z-index: 4; padding: 6px 10px; border-radius: 999px; background: rgba(0, 0, 0, 0.55); color: white; font-size: 13px; line-height: 1; pointer-events: none; }
@@ -357,16 +317,8 @@ class PeanutGalleryCard extends HTMLElement {
         .menu-panel { display: flex; flex-direction: column-reverse; align-items: flex-end; gap: 8px; margin-bottom: 8px; }
         .time-machine { position: relative; }
         input[type="date"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
-        ha-card.controls-hidden .today,
-        ha-card.controls-hidden .shuffle,
-        ha-card.controls-hidden .date-label,
-        ha-card.controls-hidden .menu,
-        ha-card.no-image .today,
-        ha-card.no-image .shuffle,
-        ha-card.no-image .date-label,
-        ha-card.no-image .menu {
-          display: none;
-        }
+        ha-card.controls-hidden .today, ha-card.controls-hidden .shuffle, ha-card.controls-hidden .date-label, ha-card.controls-hidden .menu,
+        ha-card.no-image .today, ha-card.no-image .shuffle, ha-card.no-image .date-label, ha-card.no-image .menu { display: none; }
       </style>
 
       <ha-card class="no-image">
@@ -382,6 +334,7 @@ class PeanutGalleryCard extends HTMLElement {
           <summary class="menu-summary" title="More"><ha-icon icon="mdi:dots-horizontal"></ha-icon></summary>
           <div class="menu-panel">
             <a class="menu-action open-image" target="_blank" rel="noopener noreferrer" title="Open image"><ha-icon icon="mdi:open-in-new"></ha-icon></a>
+            <button class="menu-action same-date-toggle" type="button" title="Same-date shuffle"><ha-icon icon="mdi:firework"></ha-icon></button>
             <label class="menu-action time-machine" title="Time machine"><ha-icon icon="mdi:history"></ha-icon><input class="date-picker" type="date" min="${this.config.start_date}" max="${this.todayIso()}" /></label>
           </div>
         </details>
@@ -393,6 +346,7 @@ class PeanutGalleryCard extends HTMLElement {
     this.$(".placeholder-button").addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); this.showToday(); });
     this.$(".today").addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); this.showToday(); });
     this.$(".shuffle").addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); this.showRandom(); });
+    this.$(".same-date-toggle").addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); this.toggleSameDateShuffle(); });
     this.$(".menu").addEventListener("click", (event) => event.stopPropagation());
     this.$(".date-picker").addEventListener("change", (event) => {
       event.stopPropagation();
@@ -400,6 +354,7 @@ class PeanutGalleryCard extends HTMLElement {
       const menu = this.$("details.menu");
       if (menu) menu.open = false;
     });
+    this.updateSameDateButton();
   }
 }
 
@@ -432,6 +387,7 @@ class PeanutGalleryCardEditor extends HTMLElement {
       <div class="editor">
         <label>Card ID<input class="card-id" value="${this.value("card_id")}" placeholder="peanuts_main"></label>
         <label>First published GoComics URL<input class="source-url" value="${this.value("source_url", "https://www.gocomics.com/peanuts/1950/10/02")}" placeholder="https://www.gocomics.com/peanuts/1950/10/02"></label>
+        <label>Archive end date<input class="archive-end" type="date" value="${this.value("archive_end_date", "")}"></label>
         <label>Auto-return to Today minutes<input class="auto-today" type="number" min="0" value="${this.value("auto_today_minutes", 30)}"></label>
         <label>Action timeout seconds<input class="action-timeout" type="number" min="0" value="${this.value("action_timeout_seconds", 75)}"></label>
       </div>
@@ -439,6 +395,7 @@ class PeanutGalleryCardEditor extends HTMLElement {
 
     this.shadowRoot.querySelector(".card-id").addEventListener("change", (event) => this.updateValue("card_id", event.currentTarget.value.trim()));
     this.shadowRoot.querySelector(".source-url").addEventListener("change", (event) => this.updateValue("source_url", event.currentTarget.value.trim()));
+    this.shadowRoot.querySelector(".archive-end").addEventListener("change", (event) => this.updateValue("archive_end_date", event.currentTarget.value.trim()));
     this.shadowRoot.querySelector(".auto-today").addEventListener("change", (event) => this.updateValue("auto_today_minutes", Number(event.currentTarget.value || 0)));
     this.shadowRoot.querySelector(".action-timeout").addEventListener("change", (event) => this.updateValue("action_timeout_seconds", Number(event.currentTarget.value || 0)));
   }
