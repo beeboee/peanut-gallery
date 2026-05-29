@@ -1,19 +1,21 @@
 class PeanutGalleryCard extends HTMLElement {
   setConfig(config) {
     this.config = {
+      card_id: "",
       source_url: "https://www.gocomics.com/peanuts/1950/10/02",
       image_entity: "sensor.peanut_gallery_image_url",
       date_entity: "sensor.peanut_gallery_date",
       today_action: "peanut_gallery.today",
       random_action: "peanut_gallery.random",
       date_action: "peanut_gallery.date",
-      fallback_image: "/local/peanut_gallery/peanuts.jpg",
+      fallback_image: "",
       start_date: "1950-10-02",
       show_today_label: true,
       auto_today_minutes: 30,
       ...config,
     };
 
+    if (!this.config.card_id) this.config.card_id = this.defaultCardId();
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
 
     this.controlsVisible = true;
@@ -22,6 +24,18 @@ class PeanutGalleryCard extends HTMLElement {
     this.actionInProgress = false;
     this.autoTodayTimer = null;
     this.renderBase();
+  }
+
+  static getStubConfig() {
+    return {
+      card_id: "peanuts_main",
+      source_url: "https://www.gocomics.com/peanuts/1950/10/02",
+      auto_today_minutes: 30,
+    };
+  }
+
+  static getConfigElement() {
+    return document.createElement("peanut-gallery-card-editor");
   }
 
   set hass(hass) {
@@ -36,6 +50,10 @@ class PeanutGalleryCard extends HTMLElement {
     return new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   }
 
+  defaultCardId() {
+    return `${this.sourceSlug()}_main`;
+  }
+
   sourceSlug() {
     try {
       const url = new URL(this.config.source_url);
@@ -45,14 +63,15 @@ class PeanutGalleryCard extends HTMLElement {
     }
   }
 
-  sourceData() {
+  instanceData() {
     const entity = this._hass?.states?.[this.config.image_entity];
-    return entity?.attributes?.sources?.[this.sourceSlug()] || null;
+    return entity?.attributes?.instances?.[this.config.card_id] || null;
   }
 
   serviceData(extra = {}) {
     const data = { ...extra };
     if (this.config.source_url) data.source_url = this.config.source_url;
+    if (this.config.card_id) data.card_id = this.config.card_id;
     return data;
   }
 
@@ -74,36 +93,21 @@ class PeanutGalleryCard extends HTMLElement {
   getDateEntity() { return this._hass?.states?.[this.config.date_entity]; }
 
   getImageSrc() {
-    const source = this.sourceData();
-    if (source?.image_url) return source.image_url;
-
-    const entity = this.getImageEntity();
-    const entitySlug = entity?.attributes?.slug;
-    const state = entity?.state;
-    if (entitySlug === this.sourceSlug() && state && state !== "unknown" && state !== "unavailable") return state;
-
-    return `${this.config.fallback_image}?${Date.now()}`;
+    const instance = this.instanceData();
+    if (instance?.image_url) return instance.image_url;
+    return this.config.fallback_image || "";
   }
 
   getIsoDate() {
-    const source = this.sourceData();
-    if (source?.date) return source.date;
-
-    const entity = this.getImageEntity();
-    if (entity?.attributes?.slug === this.sourceSlug()) return entity.attributes.date || "";
-    return "";
+    const instance = this.instanceData();
+    return instance?.date || "";
   }
 
   getDateLabel() {
-    const source = this.sourceData();
+    const instance = this.instanceData();
     const isoDate = this.getIsoDate();
     if (this.config.show_today_label && isoDate === this.todayIso()) return "Today";
-    if (source?.date_text) return source.date_text;
-
-    const dateEntity = this.getDateEntity();
-    const sourceDate = dateEntity?.attributes?.sources?.[this.sourceSlug()]?.date_text;
-    if (sourceDate) return sourceDate;
-
+    if (instance?.date_text) return instance.date_text;
     return isoDate || "";
   }
 
@@ -111,6 +115,7 @@ class PeanutGalleryCard extends HTMLElement {
     if (!this.shadowRoot || !this._hass) return;
     const imageSrc = this.getImageSrc();
     const dateLabel = this.getDateLabel();
+
     if (imageSrc !== this.lastImageSrc) {
       this.lastImageSrc = imageSrc;
       this.setImage(imageSrc);
@@ -125,14 +130,30 @@ class PeanutGalleryCard extends HTMLElement {
 
   setImage(src) {
     const img = this.$("#comic");
-    if (!img || !src) return;
+    const placeholder = this.$(".placeholder");
+    const scroll = this.$(".comic-scroll");
+    if (!img || !placeholder || !scroll) return;
+
+    if (!src) {
+      img.removeAttribute("src");
+      scroll.hidden = true;
+      placeholder.hidden = false;
+      return;
+    }
+
     img.src = src;
+    scroll.hidden = false;
+    placeholder.hidden = true;
     if (img.complete) this.adjustImageWidth(img);
   }
 
   setImageLink(src) {
     const link = this.$(".open-image");
-    if (!link || !src) return;
+    if (!link) return;
+    if (!src) {
+      link.removeAttribute("href");
+      return;
+    }
     link.href = src;
     link.removeAttribute("download");
   }
@@ -208,10 +229,13 @@ class PeanutGalleryCard extends HTMLElement {
   renderBase() {
     this.shadowRoot.innerHTML = `
       <style>
-        :host(.busy) .today, :host(.busy) .shuffle, :host(.busy) .date-label, :host(.busy) .menu-summary, :host(.busy) .menu-action, :host(.busy) .date-picker, :host(.busy) #comic { pointer-events: none; opacity: 0.6; }
+        :host(.busy) .today, :host(.busy) .shuffle, :host(.busy) .date-label, :host(.busy) .menu-summary, :host(.busy) .menu-action, :host(.busy) .date-picker, :host(.busy) #comic, :host(.busy) .placeholder-button { pointer-events: none; opacity: 0.6; }
         ha-card { position: relative; overflow: hidden; border-radius: 6px; padding: 0; }
         .comic-scroll { width: 100%; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
         img { display: block; width: 100%; height: auto; max-width: none; cursor: pointer; }
+        .placeholder { height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--secondary-text-color); background: var(--ha-card-background, var(--card-background-color, white)); cursor: default; }
+        .placeholder ha-icon { --mdc-icon-size: 56px; opacity: .75; }
+        .placeholder-button { display: flex; align-items: center; gap: 8px; border: 0; border-radius: 999px; padding: 8px 14px; background: rgba(0,0,0,.55); color: white; cursor: pointer; }
         .overlay-button, .menu-action, .menu-summary { display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border: 0; border-radius: 999px; background: rgba(0,0,0,.55); color: white; box-shadow: none; cursor: pointer; text-decoration: none; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); box-sizing: border-box; }
         .today { position: absolute; top: 8px; left: 8px; z-index: 5; }
         .shuffle { position: absolute; top: 8px; right: 8px; z-index: 5; }
@@ -225,7 +249,11 @@ class PeanutGalleryCard extends HTMLElement {
         ha-card.controls-hidden .today, ha-card.controls-hidden .shuffle, ha-card.controls-hidden .date-label, ha-card.controls-hidden .menu { display: none; }
       </style>
       <ha-card>
-        <div class="comic-scroll"><img id="comic" alt="GoComics comic" /></div>
+        <div class="placeholder">
+          <ha-icon icon="mdi:newspaper-variant-outline"></ha-icon>
+          <button class="placeholder-button" type="button"><ha-icon icon="mdi:reload"></ha-icon><span>Load today</span></button>
+        </div>
+        <div class="comic-scroll" hidden><img id="comic" alt="GoComics comic" /></div>
         <button class="overlay-button today" title="Today" type="button"><ha-icon icon="mdi:calendar-today"></ha-icon></button>
         <button class="overlay-button shuffle" title="Random" type="button"><ha-icon icon="mdi:shuffle-variant"></ha-icon></button>
         <div class="date-label"></div>
@@ -241,6 +269,7 @@ class PeanutGalleryCard extends HTMLElement {
 
     this.$("#comic").addEventListener("load", (event) => this.adjustImageWidth(event.currentTarget));
     this.$("#comic").addEventListener("click", (event) => { event.stopPropagation(); this.toggleControls(); });
+    this.$(".placeholder-button").addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); this.showToday(); });
     this.$(".today").addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); this.showToday(); });
     this.$(".shuffle").addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); this.showRandom(); });
     this.$(".menu").addEventListener("click", (event) => event.stopPropagation());
@@ -253,6 +282,51 @@ class PeanutGalleryCard extends HTMLElement {
   }
 }
 
+class PeanutGalleryCardEditor extends HTMLElement {
+  setConfig(config) {
+    this.config = { ...config };
+    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+    this.render();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+  }
+
+  value(key, fallback = "") {
+    return this.config?.[key] ?? fallback;
+  }
+
+  fireChanged() {
+    this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this.config }, bubbles: true, composed: true }));
+  }
+
+  updateValue(key, value) {
+    this.config = { ...this.config, [key]: value };
+    this.fireChanged();
+  }
+
+  render() {
+    this.shadowRoot.innerHTML = `
+      <style>
+        .editor { display: grid; gap: 12px; }
+        label { display: grid; gap: 4px; font-size: 14px; }
+        input { box-sizing: border-box; width: 100%; padding: 8px; border: 1px solid var(--divider-color); border-radius: 4px; background: var(--card-background-color); color: var(--primary-text-color); }
+      </style>
+      <div class="editor">
+        <label>Card ID<input class="card-id" value="${this.value("card_id")}" placeholder="peanuts_main"></label>
+        <label>First published GoComics URL<input class="source-url" value="${this.value("source_url", "https://www.gocomics.com/peanuts/1950/10/02")}" placeholder="https://www.gocomics.com/peanuts/1950/10/02"></label>
+        <label>Auto-return to Today minutes<input class="auto-today" type="number" min="0" value="${this.value("auto_today_minutes", 30)}"></label>
+      </div>
+    `;
+
+    this.shadowRoot.querySelector(".card-id").addEventListener("change", (event) => this.updateValue("card_id", event.currentTarget.value.trim()));
+    this.shadowRoot.querySelector(".source-url").addEventListener("change", (event) => this.updateValue("source_url", event.currentTarget.value.trim()));
+    this.shadowRoot.querySelector(".auto-today").addEventListener("change", (event) => this.updateValue("auto_today_minutes", Number(event.currentTarget.value || 0)));
+  }
+}
+
 if (!customElements.get("peanut-gallery-card")) customElements.define("peanut-gallery-card", PeanutGalleryCard);
+if (!customElements.get("peanut-gallery-card-editor")) customElements.define("peanut-gallery-card-editor", PeanutGalleryCardEditor);
 window.customCards = window.customCards || [];
 window.customCards.push({ type: "peanut-gallery-card", name: "Peanut Gallery Card", description: "Shows a GoComics comic with today, shuffle, open image, and date controls." });
