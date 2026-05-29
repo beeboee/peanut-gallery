@@ -17,6 +17,7 @@ CONF_CURRENT_IMAGE = "current_image"
 CONF_DATE_FILE = "date_file"
 CONF_QUEUE_FILE = "queue_file"
 CONF_ARCHIVE_END_DATE = "archive_end_date"
+CONF_DAILY_MODE = "daily_mode"
 CONF_SAME_DATE = "same_date"
 CONF_TARGET_DATE = "target_date"
 
