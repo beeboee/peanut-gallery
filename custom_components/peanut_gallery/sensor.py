@@ -39,6 +39,10 @@ class PeanutGalleryBaseSensor(SensorEntity):
     def result(self):
         return self.hass.data.get(DOMAIN, {}).get("last_result")
 
+    @property
+    def results(self):
+        return self.hass.data.get(DOMAIN, {}).get("results", {})
+
 
 class PeanutGalleryDateSensor(PeanutGalleryBaseSensor):
     _attr_name = "Peanut Gallery Date"
@@ -49,6 +53,18 @@ class PeanutGalleryDateSensor(PeanutGalleryBaseSensor):
     def native_value(self):
         result = self.result
         return result.date_text if result else None
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "sources": {
+                slug: {
+                    "date": result.day.isoformat(),
+                    "date_text": result.date_text,
+                }
+                for slug, result in self.results.items()
+            }
+        }
 
 
 class PeanutGalleryImageSensor(PeanutGalleryBaseSensor):
@@ -66,13 +82,31 @@ class PeanutGalleryImageSensor(PeanutGalleryBaseSensor):
     @property
     def extra_state_attributes(self):
         result = self.result
-        if not result:
-            return {}
-        return {
-            "image_url": result.image_url,
-            "date": result.day.isoformat(),
-            "path": str(result.image_path),
+        attrs = {}
+
+        if result:
+            attrs.update(
+                {
+                    "image_url": result.image_url,
+                    "date": result.day.isoformat(),
+                    "date_text": result.date_text,
+                    "slug": result.slug,
+                    "path": str(result.image_path),
+                }
+            )
+
+        attrs["sources"] = {
+            slug: {
+                "image_url": f"{item.image_url}?{item.day.isoformat()}",
+                "raw_image_url": item.image_url,
+                "date": item.day.isoformat(),
+                "date_text": item.date_text,
+                "path": str(item.image_path),
+            }
+            for slug, item in self.results.items()
         }
+
+        return attrs
 
 
 class PeanutGalleryQueueSensor(PeanutGalleryBaseSensor):
@@ -84,3 +118,14 @@ class PeanutGalleryQueueSensor(PeanutGalleryBaseSensor):
     def native_value(self):
         result = self.result
         return result.queue_size if result else None
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "sources": {
+                slug: {
+                    "queue_size": result.queue_size,
+                }
+                for slug, result in self.results.items()
+            }
+        }
