@@ -129,9 +129,16 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         client = hass.data[DOMAIN]["client"]
         source_url = call.data.get(CONF_SOURCE_URL)
         max_items = int(call.data.get("max_items", 5))
+        delay_seconds = float(call.data.get("delay_seconds", 12))
+        max_failures_per_date = int(call.data.get("max_failures_per_date", 3))
 
         status = await hass.async_add_executor_job(
-            lambda: client.archive_step(source_url, max_items)
+            lambda: client.archive_step(
+                source_url,
+                max_items=max_items,
+                delay_seconds=delay_seconds,
+                max_failures_per_date=max_failures_per_date,
+            )
         )
 
         hass.data[DOMAIN].setdefault("archive_status", {})[status["slug"]] = status
@@ -166,6 +173,8 @@ async def _async_register_services(hass: HomeAssistant) -> None:
             {
                 SOURCE_FIELD: cv.string,
                 vol.Optional("max_items", default=5): vol.Coerce(int),
+                vol.Optional("delay_seconds", default=12): vol.Coerce(float),
+                vol.Optional("max_failures_per_date", default=3): vol.Coerce(int),
             }
         ),
     )
