@@ -18,6 +18,7 @@ from .const import (
     CONF_CACHE_SIZE,
     CONF_CARD_ID,
     CONF_CURRENT_IMAGE,
+    CONF_DAILY_MODE,
     CONF_DATE_FILE,
     CONF_QUEUE_FILE,
     CONF_SAME_DATE,
@@ -45,6 +46,7 @@ FRONTEND_URL = f"/{DOMAIN}_static"
 SOURCE_FIELD = vol.Optional(CONF_SOURCE_URL)
 CARD_ID_FIELD = vol.Optional(CONF_CARD_ID)
 ARCHIVE_END_DATE_FIELD = vol.Optional(CONF_ARCHIVE_END_DATE)
+DAILY_MODE_FIELD = vol.Optional(CONF_DAILY_MODE)
 SAME_DATE_FIELD = vol.Optional(CONF_SAME_DATE)
 TARGET_DATE_FIELD = vol.Optional(CONF_TARGET_DATE)
 
@@ -111,7 +113,17 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         client = hass.data[DOMAIN]["client"]
         source_url = call.data.get(CONF_SOURCE_URL)
         card_id = call.data.get(CONF_CARD_ID)
-        await _run_and_update(lambda: client.serve_today(source_url), card_id)
+        archive_end_date = call.data.get(CONF_ARCHIVE_END_DATE)
+        daily_mode = call.data.get(CONF_DAILY_MODE)
+        await _run_and_update(
+            lambda: client.serve_today(
+                source_url,
+                archive_end_date=archive_end_date,
+                daily_mode=daily_mode,
+                card_id=card_id,
+            ),
+            card_id,
+        )
 
     async def handle_random(call: ServiceCall) -> None:
         client = hass.data[DOMAIN]["client"]
@@ -162,7 +174,13 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         DOMAIN,
         SERVICE_TODAY,
         handle_today,
-        schema=vol.Schema(optional_fields),
+        schema=vol.Schema(
+            {
+                **optional_fields,
+                ARCHIVE_END_DATE_FIELD: cv.string,
+                DAILY_MODE_FIELD: cv.string,
+            }
+        ),
     )
     hass.services.async_register(
         DOMAIN,
