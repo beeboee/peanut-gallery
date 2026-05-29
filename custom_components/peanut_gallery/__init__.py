@@ -4,6 +4,7 @@ from datetime import date
 from pathlib import Path
 
 import voluptuous as vol
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
@@ -32,6 +33,7 @@ from .const import (
 )
 
 PLATFORMS = ["sensor"]
+FRONTEND_URL = f"/{DOMAIN}_static"
 
 
 def _parse_start_date(value: str) -> date:
@@ -48,6 +50,22 @@ def _build_client(hass: HomeAssistant, data: dict) -> PeanutGalleryClient:
         cache_size=int(data.get(CONF_CACHE_SIZE, DEFAULT_CACHE_SIZE)),
         start_date=_parse_start_date(data.get(CONF_START_DATE, DEFAULT_START_DATE)),
     )
+
+
+async def _async_register_frontend(hass: HomeAssistant) -> None:
+    if hass.data[DOMAIN].get("frontend_registered"):
+        return
+
+    await hass.http.async_register_static_paths(
+        [
+            StaticPathConfig(
+                FRONTEND_URL,
+                str(Path(__file__).parent / "www"),
+                True,
+            )
+        ]
+    )
+    hass.data[DOMAIN]["frontend_registered"] = True
 
 
 async def _async_register_services(hass: HomeAssistant) -> None:
@@ -92,6 +110,7 @@ async def _async_register_services(hass: HomeAssistant) -> None:
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     hass.data.setdefault(DOMAIN, {})
+    await _async_register_frontend(hass)
     return True
 
 
@@ -101,6 +120,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN]["client"] = _build_client(hass, data)
     hass.data[DOMAIN].setdefault("last_result", None)
 
+    await _async_register_frontend(hass)
     await _async_register_services(hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(async_update_options))
