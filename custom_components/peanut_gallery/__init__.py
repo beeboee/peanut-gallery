@@ -37,7 +37,7 @@ from .const import (
 
 PLATFORMS = ["sensor"]
 FRONTEND_URL = f"/{DOMAIN}_static"
-SOURCE_SCHEMA = vol.Optional(CONF_SOURCE_URL): cv.string
+SOURCE_FIELD = vol.Optional(CONF_SOURCE_URL)
 
 
 def _parse_start_date(value: str) -> date:
@@ -116,19 +116,19 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         DOMAIN,
         SERVICE_TODAY,
         handle_today,
-        schema=vol.Schema({SOURCE_SCHEMA}),
+        schema=vol.Schema({SOURCE_FIELD: cv.string}),
     )
     hass.services.async_register(
         DOMAIN,
         SERVICE_RANDOM,
         handle_random,
-        schema=vol.Schema({SOURCE_SCHEMA}),
+        schema=vol.Schema({SOURCE_FIELD: cv.string}),
     )
     hass.services.async_register(
         DOMAIN,
         SERVICE_DATE,
         handle_date,
-        schema=vol.Schema({vol.Required("date"): cv.string, SOURCE_SCHEMA}),
+        schema=vol.Schema({vol.Required("date"): cv.string, SOURCE_FIELD: cv.string}),
     )
     hass.services.async_register(DOMAIN, SERVICE_REFILL, handle_refill)
     hass.data[DOMAIN]["services_registered"] = True
