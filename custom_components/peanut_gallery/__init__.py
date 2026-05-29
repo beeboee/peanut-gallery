@@ -197,7 +197,7 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         DOMAIN,
         SERVICE_DATE,
         handle_date,
-        schema=vol.Schema({vol.Required("date"): cv.string, **optional_fields}),
+        schema=vol.Schema({vol.Required("date"): cv.string, **optional_fields, **daily_fields}),
     )
     hass.services.async_register(DOMAIN, SERVICE_REFILL, handle_refill)
     hass.data[DOMAIN]["services_registered"] = True
