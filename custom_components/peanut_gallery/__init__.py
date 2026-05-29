@@ -73,6 +73,11 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     hass.data[DOMAIN]["frontend_registered"] = True
 
 
+def _store_result(hass: HomeAssistant, result: PeanutGalleryResult) -> None:
+    hass.data[DOMAIN]["last_result"] = result
+    hass.data[DOMAIN].setdefault("results", {})[result.slug] = result
+
+
 async def _async_register_services(hass: HomeAssistant) -> None:
     if hass.data[DOMAIN].get("services_registered"):
         return
@@ -80,7 +85,7 @@ async def _async_register_services(hass: HomeAssistant) -> None:
     async def _run_and_update(func) -> PeanutGalleryResult | None:
         result = await hass.async_add_executor_job(func)
         if isinstance(result, PeanutGalleryResult):
-            hass.data[DOMAIN]["last_result"] = result
+            _store_result(hass, result)
         async_dispatcher_send(hass, SIGNAL_UPDATED)
         return result
 
@@ -145,6 +150,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     data = {**entry.data, **entry.options}
     hass.data[DOMAIN]["client"] = _build_client(hass, data)
     hass.data[DOMAIN].setdefault("last_result", None)
+    hass.data[DOMAIN].setdefault("results", {})
 
     await _async_register_frontend(hass)
     await _async_register_services(hass)
