@@ -13,14 +13,17 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .comic import PeanutGalleryClient, PeanutGalleryResult
 from .const import (
+    CONF_ARCHIVE_END_DATE,
     CONF_CACHE_DIR,
     CONF_CACHE_SIZE,
     CONF_CARD_ID,
     CONF_CURRENT_IMAGE,
     CONF_DATE_FILE,
     CONF_QUEUE_FILE,
+    CONF_SAME_DATE,
     CONF_SOURCE_URL,
     CONF_START_DATE,
+    CONF_TARGET_DATE,
     DEFAULT_CACHE_DIR,
     DEFAULT_CACHE_SIZE,
     DEFAULT_CURRENT_IMAGE,
@@ -41,6 +44,9 @@ PLATFORMS = ["sensor"]
 FRONTEND_URL = f"/{DOMAIN}_static"
 SOURCE_FIELD = vol.Optional(CONF_SOURCE_URL)
 CARD_ID_FIELD = vol.Optional(CONF_CARD_ID)
+ARCHIVE_END_DATE_FIELD = vol.Optional(CONF_ARCHIVE_END_DATE)
+SAME_DATE_FIELD = vol.Optional(CONF_SAME_DATE)
+TARGET_DATE_FIELD = vol.Optional(CONF_TARGET_DATE)
 
 
 def _parse_start_date(value: str) -> date:
@@ -111,7 +117,12 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         client = hass.data[DOMAIN]["client"]
         source_url = call.data.get(CONF_SOURCE_URL)
         card_id = call.data.get(CONF_CARD_ID)
-        await _run_and_update(lambda: client.serve_random(source_url), card_id)
+        same_date = bool(call.data.get(CONF_SAME_DATE, False))
+        target_date = call.data.get(CONF_TARGET_DATE)
+        await _run_and_update(
+            lambda: client.serve_random(source_url, same_date=same_date, target_date=target_date),
+            card_id,
+        )
         asyncio.create_task(_refill_in_background(client))
 
     async def handle_date(call: ServiceCall) -> None:
@@ -131,6 +142,7 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         max_items = int(call.data.get("max_items", 5))
         delay_seconds = float(call.data.get("delay_seconds", 12))
         max_failures_per_date = int(call.data.get("max_failures_per_date", 3))
+        archive_end_date = call.data.get(CONF_ARCHIVE_END_DATE)
 
         status = await hass.async_add_executor_job(
             lambda: client.archive_step(
@@ -138,6 +150,7 @@ async def _async_register_services(hass: HomeAssistant) -> None:
                 max_items=max_items,
                 delay_seconds=delay_seconds,
                 max_failures_per_date=max_failures_per_date,
+                archive_end_date=archive_end_date,
             )
         )
 
@@ -155,7 +168,13 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         DOMAIN,
         SERVICE_RANDOM,
         handle_random,
-        schema=vol.Schema(optional_fields),
+        schema=vol.Schema(
+            {
+                **optional_fields,
+                SAME_DATE_FIELD: cv.boolean,
+                TARGET_DATE_FIELD: cv.string,
+            }
+        ),
     )
     hass.services.async_register(
         DOMAIN,
@@ -172,6 +191,7 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         schema=vol.Schema(
             {
                 SOURCE_FIELD: cv.string,
+                ARCHIVE_END_DATE_FIELD: cv.string,
                 vol.Optional("max_items", default=5): vol.Coerce(int),
                 vol.Optional("delay_seconds", default=12): vol.Coerce(float),
                 vol.Optional("max_failures_per_date", default=3): vol.Coerce(int),
