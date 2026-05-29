@@ -12,6 +12,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .comic import PeanutGalleryClient, PeanutGalleryResult
+from .daily_modes import apply_daily_mode_patches
 from .const import (
     CONF_ARCHIVE_END_DATE,
     CONF_CACHE_DIR,
@@ -40,6 +41,8 @@ from .const import (
     SERVICE_TODAY,
     SIGNAL_UPDATED,
 )
+
+apply_daily_mode_patches(PeanutGalleryClient)
 
 PLATFORMS = ["sensor"]
 FRONTEND_URL = f"/{DOMAIN}_static"
