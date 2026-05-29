@@ -102,6 +102,11 @@ class PeanutGalleryClient:
             return path
         return self.config_dir / path
 
+    def _parse_date(self, value: str | None) -> date | None:
+        if not value:
+            return None
+        return date.fromisoformat(value)
+
     def _public_url_for(self, path: Path) -> str:
         try:
             rel = path.relative_to(self.config_dir / "www")
@@ -135,6 +140,17 @@ class PeanutGalleryClient:
             raise ValueError(f"Unexpected archive filename {path.name}")
         return date.fromisoformat(stem.removeprefix(prefix))
 
+    def _files_for_month_day(self, source: GoComicsSource, target_day: date) -> list[Path]:
+        files = []
+        for path in self._archive_files(source):
+            try:
+                day = self._day_from_archive_path(source, path)
+            except Exception:
+                continue
+            if day.month == target_day.month and day.day == target_day.day:
+                files.append(path)
+        return files
+
     def _load_archive_state(self) -> dict:
         if not self.archive_state_file.exists():
             return {}
@@ -154,6 +170,7 @@ class PeanutGalleryClient:
         max_items: int = 5,
         delay_seconds: float = 12.0,
         max_failures_per_date: int = 3,
+        archive_end_date: str | None = None,
     ) -> dict:
         source = self._source(source_url)
         state = self._load_archive_state()
@@ -162,7 +179,8 @@ class PeanutGalleryClient:
         current = date.fromisoformat(
             source_state.get("next_date", source.start_date.isoformat())
         )
-        end = date.today()
+        end_limit = self._parse_date(archive_end_date)
+        end = min(date.today(), end_limit) if end_limit else date.today()
 
         failed_dates = source_state.setdefault("failed_dates", {})
         skipped_failed_dates = source_state.setdefault("skipped_failed_dates", [])
@@ -206,8 +224,11 @@ class PeanutGalleryClient:
             if checked < max_items and current <= end and delay_seconds > 0:
                 time.sleep(delay_seconds)
 
+        complete = current > end
         source_state["slug"] = source.slug
         source_state["next_date"] = current.isoformat()
+        source_state["archive_end_date"] = end.isoformat()
+        source_state["complete"] = complete
         source_state["checked"] = int(source_state.get("checked", 0)) + checked
         source_state["saved"] = int(source_state.get("saved", 0)) + saved
         source_state["skipped"] = int(source_state.get("skipped", 0)) + skipped
@@ -218,7 +239,7 @@ class PeanutGalleryClient:
         self._save_archive_state(state)
 
         return dict(source_state)
-        
+
     def _get(self, url: str, headers: dict[str, str], allow_redirects: bool = True) -> requests.Response:
         last_error: Exception | None = None
 
@@ -360,9 +381,23 @@ class PeanutGalleryClient:
     def serve_today(self, source_url: str | None = None) -> PeanutGalleryResult:
         return self.serve_day(date.today(), source_url)
 
-    def serve_random(self, source_url: str | None = None) -> PeanutGalleryResult:
+    def serve_random(
+        self,
+        source_url: str | None = None,
+        same_date: bool = False,
+        target_date: str | None = None,
+    ) -> PeanutGalleryResult:
         source = self._source(source_url)
         files = self._archive_files(source)
+
+        if same_date and target_date:
+            target_day = date.fromisoformat(target_date)
+            same_day_files = self._files_for_month_day(source, target_day)
+            if same_day_files:
+                image_path = random.choice(same_day_files)
+                day = self._day_from_archive_path(source, image_path)
+                self._save_current_date(day)
+                return self._result(source, day, image_path)
 
         if files:
             image_path = random.choice(files)
