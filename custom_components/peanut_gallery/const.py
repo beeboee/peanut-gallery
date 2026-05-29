@@ -9,6 +9,7 @@ DEFAULT_DATE_FILE = "www/peanut_gallery/peanuts_date.txt"
 DEFAULT_QUEUE_FILE = "peanut_gallery_queue.json"
 
 CONF_CACHE_SIZE = "cache_size"
+CONF_CARD_ID = "card_id"
 CONF_SOURCE_URL = "source_url"
 CONF_START_DATE = "start_date"
 CONF_CACHE_DIR = "cache_dir"
