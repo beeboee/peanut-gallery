@@ -199,6 +199,4 @@ class PeanutGalleryClient:
         day_str = queue.pop(0)
         self._save_queue(queue)
         day = date.fromisoformat(day_str)
-        result = self.serve_day(day)
-        self.refill()
-        return result
+        return self.serve_day(day)
