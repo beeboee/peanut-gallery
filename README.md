@@ -6,19 +6,36 @@ Right now it supports GoComics. The card is source-URL driven, so each card can 
 
 This project is unofficial and is not affiliated with GoComics or any comic publisher.
 
-## Features
+## Frontend features
+
+These are the card and dashboard features most users will interact with day to day.
 
 - Lovelace card: `custom:peanut-gallery-card`
 - GoComics support using a comic's first published URL
 - Multiple independent cards with `card_id`
 - Today, random, specific-date, and open-image controls
-- Optional local archive under `/config/www/gocomics/`
-- Archive progress tracking
-- Optional archive end date for finite runs or curated collections
+- Tap the comic to hide or show controls
+- Same-date shuffle toggle for fixed calendar dates
+- Native mobile-friendly date picker
+- Date picker range limits from first published date to archive end date or today
 - Monthly random-year daily mode for archive-based daily reading
-- Same-date shuffle for fixed calendar dates
-- Mobile-friendly native date picker
 - Card visual editor support
+
+<details>
+<summary>Backend functions</summary>
+
+These are the integration-side pieces that support the card.
+
+- Local archive storage under `/config/www/gocomics/`
+- Archive progress tracking
+- Batch archive service with saved crawl position
+- Optional archive end date for finite runs or curated collections
+- Per-card image state through sensor attributes
+- Per-card monthly daily-mode state
+- Local file serving through Home Assistant's `/local/` path
+- Current source support: GoComics
+
+</details>
 
 ## Install with HACS
 
@@ -145,7 +162,8 @@ Same-date shuffle ignores weekday matching.
 
 The toggle is stored in browser local storage per `card_id`. It is not synced between devices.
 
-## Services
+<details>
+<summary>Services</summary>
 
 ### Today
 
@@ -212,7 +230,10 @@ data:
 
 `max_items` is the number of dates checked per call. It is not the total archive size.
 
-## Archive automation
+</details>
+
+<details>
+<summary>Archive automation</summary>
 
 ```yaml
 alias: Comic Archive Grabber
@@ -236,7 +257,10 @@ action:
 
 Adjust the interval, `max_items`, and `delay_seconds` to match how aggressively you want to archive.
 
-## Local files
+</details>
+
+<details>
+<summary>Local files and sensors</summary>
 
 Archived images are stored here:
 
@@ -249,8 +273,6 @@ Home Assistant exposes `/config/www` as `/local`, so an archived file is availab
 ```text
 /local/gocomics/<comic-slug>/<year>/<month>/<comic-slug>_<YYYY-MM-DD>.jpg
 ```
-
-## Sensors
 
 The integration creates these sensors:
 
@@ -268,6 +290,8 @@ Archive progress is stored in the archive sensor's `sources` attribute and in:
 ```text
 /config/peanut_gallery_archive_state.json
 ```
+
+</details>
 
 ## Troubleshooting
 
