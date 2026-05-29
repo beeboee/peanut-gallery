@@ -6,13 +6,13 @@ Right now it supports GoComics. The card is source-URL driven, so each card can 
 
 This project is unofficial and is not affiliated with GoComics or any comic publisher.
 
-## Frontend features
+## Features
 
-- **One card, many comics** — point each card at a GoComics start URL.
-- **Independent panels** — separate cards stay separate with `card_id`.
+- **One card, many comics** — point each card at its own GoComics URL.
+- **Independent panels** — group or seperate cards by giving them the same or different `card_id`.
 - **Today button** — load the live date or an archive-based daily pick.
 - **Archive shuffle** — browse saved comics without re-fetching every click.
-- **Date-lock shuffle** — randomize only the current month/day across years.
+- **Date-lock shuffle** — Shuffle through todays comics of yester-year.
 - **Time Machine** — native date picker with publish-range limits.
 - **Clean reading mode** — tap the comic to hide or show controls.
 - **Mobile-friendly controls** — Today, Shuffle, Open, and Date in one card.
@@ -22,7 +22,7 @@ This project is unofficial and is not affiliated with GoComics or any comic publ
 <summary>Backend functions</summary>
 
 - **Local archive** — saves images under `/config/www/gocomics/`.
-- **Batch crawler** — downloads in small chunks instead of one giant run.
+- **Batch crawler** — downloads in small, variable chunks instead of one giant run.
 - **Resume-safe progress** — keeps its place across restarts.
 - **Archive caps** — optional end dates for finite runs or curated sets.
 - **Per-card state** — tracks current images and monthly archive picks by `card_id`.
