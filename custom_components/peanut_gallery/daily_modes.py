@@ -4,11 +4,10 @@ import random
 from datetime import date
 
 MIN_IMAGE_BYTES = 10000
-DAILY_MODE_MONTHLY_RANDOM_YEAR = "monthly_random_year"
 
 
 def apply_daily_mode_patches(client_cls):
-    """Patch daily-mode behavior without changing the main comic client shape."""
+    """Patch archive-daily behavior without exposing a user-facing mode switch."""
 
     def _archive_years_for_month(self, source, target_day: date, archive_end_date: str | None = None) -> list[int]:
         end_limit = self._parse_date(archive_end_date)
@@ -28,6 +27,24 @@ def apply_daily_mode_patches(client_cls):
             years.add(day.year)
 
         return sorted(years)
+
+    def serve_today(
+        self,
+        source_url: str | None = None,
+        archive_end_date: str | None = None,
+        daily_mode: str | None = None,
+        card_id: str | None = None,
+    ):
+        source = self._source(source_url)
+
+        # A set archive end date means this card is operating from a finite archive.
+        # Use archive-daily behavior automatically; no frontend daily_mode needed.
+        if archive_end_date:
+            result = self._serve_monthly_random_year_today(source, archive_end_date, card_id)
+            if result is not None:
+                return result
+
+        return self.serve_day(date.today(), source_url)
 
     def _serve_monthly_random_year_today(self, source, archive_end_date: str | None, card_id: str | None):
         today = date.today()
@@ -70,7 +87,6 @@ def apply_daily_mode_patches(client_cls):
 
         files = self._archive_files(source)
         if files:
-            # Nothing for this calendar month has been archived yet. This is only an early-archive fallback.
             return self._result_from_file(source, random.choice(files))
 
         return None
@@ -91,5 +107,6 @@ def apply_daily_mode_patches(client_cls):
         return self.serve_today(source_url)
 
     client_cls._archive_years_for_month = _archive_years_for_month
+    client_cls.serve_today = serve_today
     client_cls._serve_monthly_random_year_today = _serve_monthly_random_year_today
     client_cls.serve_random = serve_random
