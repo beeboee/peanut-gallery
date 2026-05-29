@@ -1,6 +1,7 @@
 DOMAIN = "peanut_gallery"
 
 DEFAULT_CACHE_SIZE = 3
+DEFAULT_SOURCE_URL = "https://www.gocomics.com/peanuts/1950/10/02"
 DEFAULT_START_DATE = "1950-10-02"
 DEFAULT_CACHE_DIR = "www/peanut_gallery/cache"
 DEFAULT_CURRENT_IMAGE = "www/peanut_gallery/peanuts.jpg"
@@ -8,6 +9,7 @@ DEFAULT_DATE_FILE = "www/peanut_gallery/peanuts_date.txt"
 DEFAULT_QUEUE_FILE = "peanut_gallery_queue.json"
 
 CONF_CACHE_SIZE = "cache_size"
+CONF_SOURCE_URL = "source_url"
 CONF_START_DATE = "start_date"
 CONF_CACHE_DIR = "cache_dir"
 CONF_CURRENT_IMAGE = "current_image"
