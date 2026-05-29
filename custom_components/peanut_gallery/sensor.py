@@ -19,6 +19,7 @@ async def async_setup_entry(
             PeanutGalleryDateSensor(hass),
             PeanutGalleryImageSensor(hass),
             PeanutGalleryQueueSensor(hass),
+            PeanutGalleryArchiveSensor(hass),
         ],
         True,
     )
@@ -149,4 +150,21 @@ class PeanutGalleryQueueSensor(PeanutGalleryBaseSensor):
                 }
                 for card_id, result in self.instances.items()
             },
+        }
+class PeanutGalleryArchiveSensor(PeanutGalleryBaseSensor):
+    _attr_name = "Peanut Gallery Archive"
+    _attr_unique_id = "peanut_gallery_archive"
+    _attr_icon = "mdi:archive"
+
+    @property
+    def native_value(self):
+        status = self.hass.data.get(DOMAIN, {}).get("archive_status", {})
+        if not status:
+            return "idle"
+        return "ready"
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "sources": self.hass.data.get(DOMAIN, {}).get("archive_status", {})
         }
