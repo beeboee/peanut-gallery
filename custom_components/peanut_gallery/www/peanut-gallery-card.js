@@ -286,6 +286,10 @@ class PeanutGalleryCard extends HTMLElement {
           right: 8px;
           bottom: 8px;
           z-index: 5;
+          display: flex;
+          flex-direction: column-reverse;
+          align-items: flex-end;
+          gap: 8px;
         }
 
         .menu-summary {
@@ -296,15 +300,12 @@ class PeanutGalleryCard extends HTMLElement {
           display: none;
         }
 
-        .menu[open] .menu-summary {
-          display: none;
-        }
-
         .menu-panel {
           display: flex;
           flex-direction: column-reverse;
           align-items: flex-end;
           gap: 8px;
+          margin-bottom: 8px;
         }
 
         .time-machine {
