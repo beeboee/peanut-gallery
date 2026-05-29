@@ -67,17 +67,20 @@ class PeanutGalleryClient:
             return path
         return self.config_dir / path
 
-    def _public_url_for_current(self) -> str:
+    def _public_url_for(self, path: Path) -> str:
         try:
-            rel = self.current_file.relative_to(self.config_dir / "www")
+            rel = path.relative_to(self.config_dir / "www")
             return f"/local/{rel.as_posix()}"
         except ValueError:
-            return str(self.current_file)
+            return str(path)
 
     def _dated_url(self, day: date) -> str:
         return f"https://www.gocomics.com/peanuts/{day:%Y/%m/%d}"
 
     def _cache_path_for(self, day: date) -> Path:
+        return self.cache_dir / f"peanuts-{day:%Y-%m-%d}.jpg"
+
+    def _legacy_cache_path_for(self, day: date) -> Path:
         return self.cache_dir / f"peanuts_{day:%Y-%m-%d}.jpg"
 
     def _get(self, url: str, headers: dict[str, str]) -> requests.Response:
@@ -130,8 +133,13 @@ class PeanutGalleryClient:
 
     def _fetch_day(self, day: date) -> Path:
         path = self._cache_path_for(day)
+        legacy_path = self._legacy_cache_path_for(day)
 
         if path.exists() and path.stat().st_size > MIN_IMAGE_BYTES:
+            return path
+
+        if legacy_path.exists() and legacy_path.stat().st_size > MIN_IMAGE_BYTES:
+            shutil.copyfile(legacy_path, path)
             return path
 
         page_url = self._dated_url(day)
@@ -158,7 +166,7 @@ class PeanutGalleryClient:
             for item in data:
                 try:
                     day = date.fromisoformat(str(item))
-                    if self._cache_path_for(day).exists():
+                    if self._cache_path_for(day).exists() or self._legacy_cache_path_for(day).exists():
                         cleaned.append(day.isoformat())
                 except Exception:
                     continue
@@ -176,11 +184,11 @@ class PeanutGalleryClient:
     def _save_current_date(self, day: date) -> None:
         self.date_file.write_text(day.strftime("%b %d, %Y"))
 
-    def _result(self, day: date) -> PeanutGalleryResult:
+    def _result(self, day: date, image_path: Path) -> PeanutGalleryResult:
         return PeanutGalleryResult(
             day=day,
-            image_path=self.current_file,
-            image_url=self._public_url_for_current(),
+            image_path=image_path,
+            image_url=self._public_url_for(image_path),
             date_text=day.strftime("%b %d, %Y"),
             queue_size=len(self._load_queue()),
         )
@@ -209,10 +217,9 @@ class PeanutGalleryClient:
         return len(queue)
 
     def serve_day(self, day: date) -> PeanutGalleryResult:
-        src = self._fetch_day(day)
-        shutil.copyfile(src, self.current_file)
+        image_path = self._fetch_day(day)
         self._save_current_date(day)
-        return self._result(day)
+        return self._result(day, image_path)
 
     def serve_today(self) -> PeanutGalleryResult:
         return self.serve_day(date.today())
