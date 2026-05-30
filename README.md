@@ -9,24 +9,26 @@ This project is unofficial and is not affiliated with GoComics or any comic publ
 ## Features
 
 - **One card, many comics** — point each card at its own GoComics URL.
-- **Built in Daily Comics** — Every month, Peanut Gallery picks one archived year per card, and keeps using it for the rest of that month. It prefers years where the month starts on the same weekday as the current month. That keeps the daily reading order seasonal and weekday-aware without archiving duplicates 
-- **Flexible groups** — group or seperate cards by giving them the same or different `card_id`.
+- **Built in Daily Comics** — every month, Peanut Gallery picks one archived year per card, and keeps using it for the rest of that month. It prefers years where the month starts on the same weekday as the current month. That keeps the daily reading order seasonal and weekday-aware without archiving duplicates.
+- **Flexible groups** — group or separate cards by giving them the same or different `card_id`.
 - **Archive shuffle** — randomize through saved comics.
-- **Date-lock shuffle** — shuffle through todays comics of yester-year.
-- **Archive daily mode** — pick a matching archive year each month and read it day by day.
+- **Date-lock shuffle** — shuffle through today's comics of yester-year.
 - **Time Machine** — choose a specific strip by date, limited to the comic's publish range.
+
 <details>
 <summary>Backend functions</summary>
-   
+
 - **Local comic archive** — save strips into `/config/www/gocomics/` for fast browsing.
 - **Batch archive service** — crawl a comic gradually with configurable batch size and delay.
 - **Archive caps** — stop at a chosen end date for finite runs or curated sets.
 - **Archive status sensor** — expose date, image URL, queue size, and archive progress in Home Assistant.
-- **This month's year** — stored at `/config/peanut_gallery_daily_state.json`
+- **This month's year** — stored at `/config/peanut_gallery_daily_state.json`.
 
 </details>
 
-## Install with HACS
+## Install
+
+### Install with HACS
 
 1. Open **HACS**.
 2. Go to **Integrations**.
@@ -44,20 +46,23 @@ This project is unofficial and is not affiliated with GoComics or any comic publ
 9. Go to **Settings → Devices & services → Add integration**.
 10. Search for **Peanut Gallery** and add it.
 
-## Add the dashboard resource
+### Add the dashboard resource
 
 Home Assistant needs the card JavaScript added as a dashboard resource.
 
-1. Go to: **Settings → Dashboards → Resources → Add resource**
+1. Go to **Settings → Dashboards → Resources → Add resource**.
 2. Add this URL:
+
    ```text
    /peanut_gallery_static/peanut-gallery-card.js
    ```
-   Resource type: **JavaScript module**
 
-3. Save and Ctrl+F5 Dashboard
+3. Set the resource type to **JavaScript module**.
+4. Save and Ctrl+F5 the dashboard.
 
 ## Basic card
+
+### Ongoing comic
 
 Minimum for an ongoing comic:
 
@@ -66,30 +71,36 @@ type: custom:peanut-gallery-card
 card_id: <anything>
 source_url: "https://www.gocomics.com/<comic>/YYYY/MM/DD"
 ```
+
 <details>
 <summary>Example</summary>
-   
+
 ```yaml
 type: custom:peanut-gallery-card
 card_id: main_ziggy
 source_url: https://www.gocomics.com/ziggy/1971/06/27
 ```
+
 </details>
+
+### Inactive comic
 
 For an inactive comic, add an end date:
 
 ```yaml
 archive_end_date: "YYYY-MM-DD"
 ```
+
 <details>
 <summary>Example</summary>
-   
+
 ```yaml
 type: custom:peanut-gallery-card
-source_url: https://www.gocomics.com/peanuts/1950/10/02
 card_id: main_peanut
-archive_end_date: "2000-02-14"
+source_url: https://www.gocomics.com/peanuts/1950/10/02
+archive_end_date: "2000-02-13"
 ```
+
 </details>
 
 ## Card options
@@ -97,8 +108,8 @@ archive_end_date: "2000-02-14"
 | Option | Required | Description |
 |---|---:|---|
 | `source_url` | Yes | First published GoComics URL. The "comic slug" and start date are read from this URL. |
-| `card_id` | Recommended | Group or seperate cards by giving them the same or different card_id. |
-| `archive_end_date` | No | Date of final publication (If applicable)|
+| `card_id` | Recommended | Group or separate cards by giving them the same or different `card_id`. |
+| `archive_end_date` | No | Date of final publication, if applicable. |
 | `auto_today_minutes` | No | Returns the card to Today after `x` minutes. Default is `30`. Use `0` to disable. |
 | `auto_load_today` | No | Loads Today automatically when the card has no current image. Defaults to `true`. |
 | `same_date_shuffle` | No | Initial state for same-date shuffle. The card remembers changes per browser. |
@@ -106,7 +117,7 @@ archive_end_date: "2000-02-14"
 
 ## Card controls
 
-- **Calendar**: show  today's comic
+- **Calendar**: show today's comic.
 - **Shuffle**: show a random comic.
 - **Comic image**: tap to hide or show controls.
 - **More (•••)**:
@@ -124,13 +135,12 @@ For example, on `12-25`, shuffle chooses from archived `12-25` comics across dif
 
 The toggle is stored in browser local storage per `card_id`. It is not synced between devices.
 
-
 ### Time Machine
 
-The date picker (time machine) is limited by the comic's start date and, when set, `archive_end_date`.
+The date picker, or time machine, is limited by the comic's start date and, when set, `archive_end_date`.
 
+## Home Assistant
 
-## Home Assistant 
 <details>
 <summary>Services</summary>
 
@@ -151,7 +161,6 @@ data:
   card_id: my_archive
   source_url: "https://www.gocomics.com/comic-slug/YYYY/MM/DD"
   archive_end_date: "YYYY-MM-DD"
-  daily_mode: monthly_random_year
 ```
 
 ### Random
