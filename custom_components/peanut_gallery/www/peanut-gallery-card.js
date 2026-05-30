@@ -166,6 +166,20 @@ class PeanutGalleryCard extends HTMLElement {
     return this.getIsoDate() || this.todayIso();
   }
 
+  resetComicScroll() {
+    const scroll = this.$(".comic-scroll");
+    if (!scroll) return;
+
+    const reset = () => {
+      scroll.scrollLeft = 0;
+      scroll.scrollTop = 0;
+    };
+
+    reset();
+    window.requestAnimationFrame(reset);
+    window.setTimeout(reset, 100);
+  }
+
   updateFromHass() {
     if (!this.shadowRoot || !this._hass) return;
     const imageSrc = this.getImageSrc();
@@ -175,6 +189,7 @@ class PeanutGalleryCard extends HTMLElement {
       this.lastImageSrc = imageSrc;
       this.setImage(imageSrc);
       this.setImageLink(imageSrc);
+      this.resetComicScroll();
     }
 
     if (dateLabel !== this.lastDateLabel) {
