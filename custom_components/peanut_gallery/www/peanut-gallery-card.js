@@ -8,6 +8,8 @@ class PeanutGalleryCard extends HTMLElement {
       today_action: "peanut_gallery.today",
       random_action: "peanut_gallery.random",
       date_action: "peanut_gallery.date",
+      previous_action: "peanut_gallery.previous",
+      next_action: "peanut_gallery.next",
       fallback_image: "",
       start_date: "1950-10-02",
       archive_end_date: "",
@@ -31,6 +33,9 @@ class PeanutGalleryCard extends HTMLElement {
     this.autoTodayTimer = null;
     this.didAutoLoadToday = false;
     this.onTodayView = false;
+    this.shuffleHistory = [];
+    this.shuffleIndex = -1;
+    this.pendingShuffleRecord = false;
     this.renderBase();
   }
 
@@ -134,6 +139,13 @@ class PeanutGalleryCard extends HTMLElement {
     this.autoTodayTimer = window.setTimeout(() => this.showToday(), minutes * 60 * 1000);
   }
 
+  clearShuffleHistory() {
+    this.shuffleHistory = [];
+    this.shuffleIndex = -1;
+    this.pendingShuffleRecord = false;
+    this.updateNavigationButtons();
+  }
+
   getImageSrc() {
     const instance = this.instanceData();
     if (instance?.image_url) return instance.image_url;
@@ -158,8 +170,26 @@ class PeanutGalleryCard extends HTMLElement {
   }
 
   updateTodayButton() {
-    const card = this.$("ha-card");
-    if (card) card.classList.toggle("on-today", this.isShowingTodayView());
+    const button = this.$(".today-menu-action");
+    if (button) button.hidden = this.isShowingTodayView();
+  }
+
+  updateNavigationButtons() {
+    const next = this.$(".next");
+    const previous = this.$(".previous");
+    const hasImage = Boolean(this.getImageSrc());
+    const inShuffleHistory = this.shuffleHistory.length > 0;
+    const canGoForwardInHistory = inShuffleHistory && this.shuffleIndex >= 0 && this.shuffleIndex < this.shuffleHistory.length - 1;
+
+    if (previous) {
+      previous.hidden = !hasImage;
+      previous.title = inShuffleHistory && this.shuffleIndex > 0 ? "Previous shuffled comic" : "Previous comic";
+    }
+
+    if (next) {
+      next.hidden = !hasImage || (inShuffleHistory && !canGoForwardInHistory);
+      next.title = canGoForwardInHistory ? "Next shuffled comic" : "Next comic";
+    }
   }
 
   targetDateForShuffle() {
@@ -180,6 +210,20 @@ class PeanutGalleryCard extends HTMLElement {
     window.setTimeout(reset, 100);
   }
 
+  recordPendingShuffle() {
+    if (!this.pendingShuffleRecord) return;
+
+    const isoDate = this.getIsoDate();
+    if (!isoDate) return;
+
+    this.shuffleHistory = this.shuffleHistory.slice(0, this.shuffleIndex + 1);
+    if (this.shuffleHistory[this.shuffleHistory.length - 1] !== isoDate) {
+      this.shuffleHistory.push(isoDate);
+    }
+    this.shuffleIndex = this.shuffleHistory.length - 1;
+    this.pendingShuffleRecord = false;
+  }
+
   updateFromHass() {
     if (!this.shadowRoot || !this._hass) return;
     const imageSrc = this.getImageSrc();
@@ -198,9 +242,11 @@ class PeanutGalleryCard extends HTMLElement {
       this.setImageLink(imageSrc);
     }
 
+    this.recordPendingShuffle();
     this.maybeAutoLoadToday(imageSrc);
     this.updateSameDateButton();
     this.updateTodayButton();
+    this.updateNavigationButtons();
   }
 
   maybeAutoLoadToday(imageSrc) {
@@ -305,14 +351,18 @@ class PeanutGalleryCard extends HTMLElement {
     } finally {
       this.actionInProgress = false;
       this.shadowRoot.host.classList.remove("busy");
+      this.updateNavigationButtons();
     }
   }
 
   showToday() {
     this.clearAutoToday();
+    this.clearShuffleHistory();
     this.onTodayView = true;
     this.updateTodayButton();
     this.setDateLabel("Today");
+    const menu = this.$("details.menu");
+    if (menu) menu.open = false;
     return this.runAction("today", () => this.callAction(this.config.today_action, this.serviceData()));
   }
 
@@ -326,17 +376,49 @@ class PeanutGalleryCard extends HTMLElement {
     }
 
     return this.runAction("random", async () => {
+      this.pendingShuffleRecord = true;
       await this.callAction(this.config.random_action, data);
       this.scheduleAutoToday();
     });
   }
 
-  showDate(date) {
+  showDate(date, options = {}) {
     if (!date) return Promise.resolve();
     this.onTodayView = false;
+    if (!options.fromShuffleHistory) this.clearShuffleHistory();
     this.updateTodayButton();
     return this.runAction("date", async () => {
       await this.callAction(this.config.date_action, this.serviceData({ date }));
+      this.scheduleAutoToday();
+    });
+  }
+
+  showPrevious() {
+    if (this.shuffleHistory.length > 0 && this.shuffleIndex > 0) {
+      this.shuffleIndex -= 1;
+      return this.showDate(this.shuffleHistory[this.shuffleIndex], { fromShuffleHistory: true });
+    }
+
+    this.clearShuffleHistory();
+    this.onTodayView = false;
+    this.updateTodayButton();
+    return this.runAction("previous", async () => {
+      await this.callAction(this.config.previous_action, this.serviceData({ date: this.getIsoDate() }));
+      this.scheduleAutoToday();
+    });
+  }
+
+  showNext() {
+    if (this.shuffleHistory.length > 0 && this.shuffleIndex < this.shuffleHistory.length - 1) {
+      this.shuffleIndex += 1;
+      return this.showDate(this.shuffleHistory[this.shuffleIndex], { fromShuffleHistory: true });
+    }
+
+    this.clearShuffleHistory();
+    this.onTodayView = false;
+    this.updateTodayButton();
+    return this.runAction("next", async () => {
+      await this.callAction(this.config.next_action, this.serviceData({ date: this.getIsoDate() }));
       this.scheduleAutoToday();
     });
   }
@@ -357,7 +439,8 @@ class PeanutGalleryCard extends HTMLElement {
   renderBase() {
     this.shadowRoot.innerHTML = `
       <style>
-        :host(.busy) .today,
+        :host(.busy) .previous,
+        :host(.busy) .next,
         :host(.busy) .shuffle,
         :host(.busy) .date-label,
         :host(.busy) .menu-summary,
@@ -378,8 +461,9 @@ class PeanutGalleryCard extends HTMLElement {
         .placeholder-button { border: 0; border-radius: 999px; padding: 8px 16px; background: rgba(0, 0, 0, 0.55); color: white; cursor: pointer; font: inherit; }
         .overlay-button, .menu-action, .menu-summary { display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border: 0; border-radius: 999px; background: rgba(0, 0, 0, 0.55); color: white; box-shadow: none; cursor: pointer; text-decoration: none; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); box-sizing: border-box; }
         .menu-action.active { background: rgba(255, 255, 255, 0.72); color: black; }
-        .today { position: absolute; top: 8px; left: 8px; z-index: 5; }
+        .previous { position: absolute; top: 8px; left: 8px; z-index: 5; }
         .shuffle { position: absolute; top: 8px; right: 8px; z-index: 5; }
+        .next { position: absolute; top: 8px; right: 58px; z-index: 5; }
         .date-label { position: absolute; left: 8px; bottom: 8px; z-index: 4; padding: 6px 10px; border-radius: 999px; background: rgba(0, 0, 0, 0.55); color: white; font-size: 13px; line-height: 1; pointer-events: none; }
         .menu { position: absolute; right: 8px; bottom: 8px; z-index: 5; display: flex; flex-direction: column-reverse; align-items: flex-end; gap: 8px; }
         .menu-summary { list-style: none; }
@@ -387,9 +471,9 @@ class PeanutGalleryCard extends HTMLElement {
         .menu-panel { display: flex; flex-direction: column-reverse; align-items: flex-end; gap: 8px; margin-bottom: 8px; }
         .time-machine { position: relative; }
         input[type="date"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
-        ha-card.on-today .today,
-        ha-card.controls-hidden .today, ha-card.controls-hidden .shuffle, ha-card.controls-hidden .date-label, ha-card.controls-hidden .menu,
-        ha-card.no-image .today, ha-card.no-image .shuffle, ha-card.no-image .date-label, ha-card.no-image .menu { display: none; }
+        [hidden],
+        ha-card.controls-hidden .previous, ha-card.controls-hidden .next, ha-card.controls-hidden .shuffle, ha-card.controls-hidden .date-label, ha-card.controls-hidden .menu,
+        ha-card.no-image .previous, ha-card.no-image .next, ha-card.no-image .shuffle, ha-card.no-image .date-label, ha-card.no-image .menu { display: none !important; }
       </style>
 
       <ha-card class="no-image">
@@ -398,13 +482,15 @@ class PeanutGalleryCard extends HTMLElement {
           <button class="placeholder-button" type="button">Reload</button>
         </div>
         <div class="comic-scroll" hidden><img id="comic" alt="GoComics comic" /></div>
-        <button class="overlay-button today" title="Today" type="button"><ha-icon icon="mdi:calendar-today"></ha-icon></button>
+        <button class="overlay-button previous" title="Previous comic" type="button" hidden><ha-icon icon="mdi:arrow-left"></ha-icon></button>
+        <button class="overlay-button next" title="Next comic" type="button" hidden><ha-icon icon="mdi:arrow-right"></ha-icon></button>
         <button class="overlay-button shuffle" title="Random" type="button"><ha-icon icon="mdi:shuffle-variant"></ha-icon></button>
         <div class="date-label"></div>
         <details class="menu">
           <summary class="menu-summary" title="More"><ha-icon icon="mdi:dots-horizontal"></ha-icon></summary>
           <div class="menu-panel">
             <a class="menu-action open-image" target="_blank" rel="noopener noreferrer" title="Open image"><ha-icon icon="mdi:open-in-new"></ha-icon></a>
+            <button class="menu-action today-menu-action" type="button" title="Today"><ha-icon icon="mdi:calendar-today"></ha-icon></button>
             <button class="menu-action same-date-toggle" type="button" title="Same-date shuffle"><ha-icon icon="mdi:calendar-lock"></ha-icon></button>
             <label class="menu-action time-machine" title="Time machine"><ha-icon icon="mdi:history"></ha-icon><input class="date-picker" type="date" min="${this.datePickerMin()}" max="${this.datePickerMax()}" /></label>
           </div>
@@ -415,8 +501,10 @@ class PeanutGalleryCard extends HTMLElement {
     this.$("#comic").addEventListener("load", (event) => this.adjustImageWidth(event.currentTarget));
     this.$("#comic").addEventListener("click", (event) => { event.stopPropagation(); this.toggleControls(); });
     this.$(".placeholder-button").addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); this.showToday(); });
-    this.$(".today").addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); this.showToday(); });
+    this.$(".previous").addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); this.showPrevious(); });
+    this.$(".next").addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); this.showNext(); });
     this.$(".shuffle").addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); this.showRandom(); });
+    this.$(".today-menu-action").addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); this.showToday(); });
     this.$(".same-date-toggle").addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); this.toggleSameDateShuffle(); });
     this.$(".menu").addEventListener("click", (event) => event.stopPropagation());
     this.$(".date-picker").addEventListener("change", (event) => {
@@ -427,6 +515,7 @@ class PeanutGalleryCard extends HTMLElement {
     });
     this.updateSameDateButton();
     this.updateTodayButton();
+    this.updateNavigationButtons();
   }
 }
 
