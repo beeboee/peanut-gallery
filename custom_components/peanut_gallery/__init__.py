@@ -13,6 +13,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .comic import PeanutGalleryClient, PeanutGalleryResult
 from .daily_modes import apply_daily_mode_patches
+from .navigation import apply_navigation_patches
 from .const import (
     CONF_ARCHIVE_END_DATE,
     CONF_CACHE_DIR,
@@ -20,6 +21,7 @@ from .const import (
     CONF_CARD_ID,
     CONF_CURRENT_IMAGE,
     CONF_DAILY_MODE,
+    CONF_DATE,
     CONF_DATE_FILE,
     CONF_QUEUE_FILE,
     CONF_SAME_DATE,
@@ -36,6 +38,8 @@ from .const import (
     DOMAIN,
     SERVICE_ARCHIVE_STEP,
     SERVICE_DATE,
+    SERVICE_NEXT,
+    SERVICE_PREVIOUS,
     SERVICE_RANDOM,
     SERVICE_REFILL,
     SERVICE_TODAY,
@@ -43,6 +47,7 @@ from .const import (
 )
 
 apply_daily_mode_patches(PeanutGalleryClient)
+apply_navigation_patches(PeanutGalleryClient)
 
 PLATFORMS = ["sensor"]
 FRONTEND_URL = f"/{DOMAIN}_static"
@@ -52,6 +57,7 @@ ARCHIVE_END_DATE_FIELD = vol.Optional(CONF_ARCHIVE_END_DATE)
 DAILY_MODE_FIELD = vol.Optional(CONF_DAILY_MODE)
 SAME_DATE_FIELD = vol.Optional(CONF_SAME_DATE)
 TARGET_DATE_FIELD = vol.Optional(CONF_TARGET_DATE)
+DATE_FIELD = vol.Optional(CONF_DATE)
 
 
 def _parse_start_date(value: str) -> date:
@@ -142,10 +148,30 @@ async def _async_register_services(hass: HomeAssistant) -> None:
 
     async def handle_date(call: ServiceCall) -> None:
         client = hass.data[DOMAIN]["client"]
-        day = date.fromisoformat(call.data["date"])
+        day = date.fromisoformat(call.data[CONF_DATE])
         source_url = call.data.get(CONF_SOURCE_URL)
         card_id = call.data.get(CONF_CARD_ID)
         await _run_and_update(lambda: client.serve_day(day, source_url), card_id)
+
+    async def handle_previous(call: ServiceCall) -> None:
+        client = hass.data[DOMAIN]["client"]
+        source_url = call.data.get(CONF_SOURCE_URL)
+        card_id = call.data.get(CONF_CARD_ID)
+        current_date = call.data.get(CONF_DATE)
+        await _run_and_update(
+            lambda: client.serve_adjacent(source_url, current_date=current_date, direction="previous"),
+            card_id,
+        )
+
+    async def handle_next(call: ServiceCall) -> None:
+        client = hass.data[DOMAIN]["client"]
+        source_url = call.data.get(CONF_SOURCE_URL)
+        card_id = call.data.get(CONF_CARD_ID)
+        current_date = call.data.get(CONF_DATE)
+        await _run_and_update(
+            lambda: client.serve_adjacent(source_url, current_date=current_date, direction="next"),
+            card_id,
+        )
 
     async def handle_refill(call: ServiceCall) -> None:
         client = hass.data[DOMAIN]["client"]
@@ -174,6 +200,8 @@ async def _async_register_services(hass: HomeAssistant) -> None:
 
     optional_fields = {SOURCE_FIELD: cv.string, CARD_ID_FIELD: cv.string}
     daily_fields = {ARCHIVE_END_DATE_FIELD: cv.string, DAILY_MODE_FIELD: cv.string}
+    navigation_schema = vol.Schema({**optional_fields, **daily_fields, DATE_FIELD: cv.string})
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_TODAY,
@@ -197,8 +225,10 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         DOMAIN,
         SERVICE_DATE,
         handle_date,
-        schema=vol.Schema({vol.Required("date"): cv.string, **optional_fields, **daily_fields}),
+        schema=vol.Schema({vol.Required(CONF_DATE): cv.string, **optional_fields, **daily_fields}),
     )
+    hass.services.async_register(DOMAIN, SERVICE_PREVIOUS, handle_previous, schema=navigation_schema)
+    hass.services.async_register(DOMAIN, SERVICE_NEXT, handle_next, schema=navigation_schema)
     hass.services.async_register(DOMAIN, SERVICE_REFILL, handle_refill)
     hass.data[DOMAIN]["services_registered"] = True
     hass.services.async_register(
