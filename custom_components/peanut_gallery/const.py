@@ -20,10 +20,13 @@ CONF_ARCHIVE_END_DATE = "archive_end_date"
 CONF_DAILY_MODE = "daily_mode"
 CONF_SAME_DATE = "same_date"
 CONF_TARGET_DATE = "target_date"
+CONF_DATE = "date"
 
 SERVICE_TODAY = "today"
 SERVICE_RANDOM = "random"
 SERVICE_DATE = "date"
+SERVICE_PREVIOUS = "previous"
+SERVICE_NEXT = "next"
 SERVICE_REFILL = "refill"
 SERVICE_ARCHIVE_STEP = "archive_step"
 
