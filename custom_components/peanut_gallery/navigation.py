@@ -10,4 +10,7 @@ def apply_navigation_patches(client_cls):
         entries = []
         for path in self._archive_files(source):
             try:
-                entries.append((self._day_from_archive_path(source, path
+                entries.append((self._day_from_archive_path(source, path), path))
+            except Exception:
+                continue
+        return sorted(entries, key=lambda item:
