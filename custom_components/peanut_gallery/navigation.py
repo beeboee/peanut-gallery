@@ -12,7 +12,3 @@ def apply_navigation_patches(client_cls):
             try:
                 entries.append((self._day_from_archive_path(source, path), path))
             except Exception:
-                continue
-        return sorted(entries, key=lambda item: item[0])
-
-    def serve_adjacent(self
