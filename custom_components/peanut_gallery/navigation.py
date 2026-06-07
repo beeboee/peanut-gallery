@@ -1,14 +1,18 @@
-from __future__ import annotations
-
 from datetime import date
 
 
 def apply_navigation_patches(client_cls):
-    """Add archive-based previous/next navigation to the client."""
-
     def _archive_entries(self, source):
-        entries = []
+        out = []
         for path in self._archive_files(source):
             try:
-                entries.append((self._day_from_archive_path(source, path), path))
+                out.append((self._day_from_archive_path(source, path), path))
             except Exception:
+                pass
+        return sorted(out, key=lambda x: x[0])
+
+    def serve_adjacent(self, source_url=None, current_date=None, direction="previous", same_date=False):
+        source = self._source(source_url)
+        entries = self._archive_entries(source)
+        if not entries:
+            raise RuntimeError(f
