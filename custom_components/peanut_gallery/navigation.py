@@ -15,9 +15,4 @@ def apply_navigation_patches(client_cls):
                 continue
         return sorted(entries, key=lambda item: item[0])
 
-    def serve_adjacent(
-        self,
-        source_url: str | None = None,
-        current_date: str | None = None,
-        direction: str = "previous",
-        same_date
+    def serve_adjacent(self
