@@ -51,6 +51,7 @@ apply_navigation_patches(PeanutGalleryClient)
 
 PLATFORMS = ["sensor"]
 FRONTEND_URL = f"/{DOMAIN}_static"
+
 SOURCE_FIELD = vol.Optional(CONF_SOURCE_URL)
 CARD_ID_FIELD = vol.Optional(CONF_CARD_ID)
 ARCHIVE_END_DATE_FIELD = vol.Optional(CONF_ARCHIVE_END_DATE)
@@ -124,6 +125,7 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         card_id = call.data.get(CONF_CARD_ID)
         archive_end_date = call.data.get(CONF_ARCHIVE_END_DATE)
         daily_mode = call.data.get(CONF_DAILY_MODE)
+
         await _run_and_update(
             lambda: client.serve_today(
                 source_url,
@@ -140,6 +142,7 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         card_id = call.data.get(CONF_CARD_ID)
         same_date = bool(call.data.get(CONF_SAME_DATE, False))
         target_date = call.data.get(CONF_TARGET_DATE)
+
         await _run_and_update(
             lambda: client.serve_random(source_url, same_date=same_date, target_date=target_date),
             card_id,
@@ -151,6 +154,7 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         day = date.fromisoformat(call.data[CONF_DATE])
         source_url = call.data.get(CONF_SOURCE_URL)
         card_id = call.data.get(CONF_CARD_ID)
+
         await _run_and_update(lambda: client.serve_day(day, source_url), card_id)
 
     async def handle_previous(call: ServiceCall) -> None:
@@ -158,8 +162,15 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         source_url = call.data.get(CONF_SOURCE_URL)
         card_id = call.data.get(CONF_CARD_ID)
         current_date = call.data.get(CONF_DATE)
+        same_date = bool(call.data.get(CONF_SAME_DATE, False))
+
         await _run_and_update(
-            lambda: client.serve_adjacent(source_url, current_date=current_date, direction="previous"),
+            lambda: client.serve_adjacent(
+                source_url,
+                current_date=current_date,
+                direction="previous",
+                same_date=same_date,
+            ),
             card_id,
         )
 
@@ -168,8 +179,15 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         source_url = call.data.get(CONF_SOURCE_URL)
         card_id = call.data.get(CONF_CARD_ID)
         current_date = call.data.get(CONF_DATE)
+        same_date = bool(call.data.get(CONF_SAME_DATE, False))
+
         await _run_and_update(
-            lambda: client.serve_adjacent(source_url, current_date=current_date, direction="next"),
+            lambda: client.serve_adjacent(
+                source_url,
+                current_date=current_date,
+                direction="next",
+                same_date=same_date,
+            ),
             card_id,
         )
 
@@ -198,9 +216,24 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         hass.data[DOMAIN].setdefault("archive_status", {})[status["slug"]] = status
         async_dispatcher_send(hass, SIGNAL_UPDATED)
 
-    optional_fields = {SOURCE_FIELD: cv.string, CARD_ID_FIELD: cv.string}
-    daily_fields = {ARCHIVE_END_DATE_FIELD: cv.string, DAILY_MODE_FIELD: cv.string}
-    navigation_schema = vol.Schema({**optional_fields, **daily_fields, DATE_FIELD: cv.string})
+    optional_fields = {
+        SOURCE_FIELD: cv.string,
+        CARD_ID_FIELD: cv.string,
+    }
+
+    daily_fields = {
+        ARCHIVE_END_DATE_FIELD: cv.string,
+        DAILY_MODE_FIELD: cv.string,
+    }
+
+    navigation_schema = vol.Schema(
+        {
+            **optional_fields,
+            **daily_fields,
+            DATE_FIELD: cv.string,
+            SAME_DATE_FIELD: cv.boolean,
+        }
+    )
 
     hass.services.async_register(
         DOMAIN,
@@ -208,6 +241,7 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         handle_today,
         schema=vol.Schema({**optional_fields, **daily_fields}),
     )
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_RANDOM,
@@ -221,16 +255,18 @@ async def _async_register_services(hass: HomeAssistant) -> None:
             }
         ),
     )
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_DATE,
         handle_date,
         schema=vol.Schema({vol.Required(CONF_DATE): cv.string, **optional_fields, **daily_fields}),
     )
+
     hass.services.async_register(DOMAIN, SERVICE_PREVIOUS, handle_previous, schema=navigation_schema)
     hass.services.async_register(DOMAIN, SERVICE_NEXT, handle_next, schema=navigation_schema)
     hass.services.async_register(DOMAIN, SERVICE_REFILL, handle_refill)
-    hass.data[DOMAIN]["services_registered"] = True
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_ARCHIVE_STEP,
@@ -246,6 +282,9 @@ async def _async_register_services(hass: HomeAssistant) -> None:
         ),
     )
 
+    hass.data[DOMAIN]["services_registered"] = True
+
+
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     hass.data.setdefault(DOMAIN, {})
     await _async_register_frontend(hass)
@@ -254,6 +293,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
+
     data = {**entry.data, **entry.options}
     hass.data[DOMAIN]["client"] = _build_client(hass, data)
     hass.data[DOMAIN].setdefault("last_result", None)
@@ -264,6 +304,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await _async_register_frontend(hass)
     await _async_register_services(hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
     entry.async_on_unload(entry.add_update_listener(async_update_options))
 
     return True
@@ -276,5 +317,4 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    return unload_ok
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
