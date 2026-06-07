@@ -15,4 +15,7 @@ def apply_navigation_patches(client_cls):
         source = self._source(source_url)
         entries = self._archive_entries(source)
         if not entries:
-            raise RuntimeError(f
+            raise RuntimeError("No archived comics found")
+        current = date.fromisoformat(current_date) if current_date else date.today()
+        if same_date:
+            entries = [(d, p) for d, p in entries if d.month == current
