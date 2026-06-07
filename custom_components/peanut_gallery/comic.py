@@ -126,14 +126,29 @@ class PeanutGalleryClient:
         return self.cache_dir / f"peanuts_{day:%Y-%m-%d}.jpg"
 
     def _archive_files(self, source: GoComicsSource) -> list[Path]:
-        root = self.archive_root / source.slug
-        if not root.exists():
-            return []
-        return sorted(
-            path
-            for path in root.glob(f"*/*/{source.slug}_*.jpg")
-            if path.exists() and path.stat().st_size > MIN_IMAGE_BYTES
-        )
+    root = self.archive_root / source.slug
+    if not root.exists():
+        return []
+
+    cache_key = source.slug
+    now = time.monotonic()
+    cache = getattr(self, "_archive_file_cache", {})
+
+    cached = cache.get(cache_key)
+    if cached is not None:
+        cached_at, files = cached
+        if now - cached_at < 60:
+            return files
+
+    files = sorted(
+        path
+        for path in root.glob(f"*/*/{source.slug}_*.jpg")
+        if path.exists() and path.stat().st_size > MIN_IMAGE_BYTES
+    )
+
+    cache[cache_key] = (now, files)
+    self._archive_file_cache = cache
+    return files
 
     def _day_from_archive_path(self, source: GoComicsSource, path: Path) -> date:
         prefix = f"{source.slug}_"
@@ -411,12 +426,19 @@ class PeanutGalleryClient:
         self.date_file.write_text(day.strftime("%b %d, %Y"))
 
     def _result(self, source: GoComicsSource, day: date, image_path: Path) -> PeanutGalleryResult:
+        cached_count = 0
+        cache = getattr(self, "_archive_file_cache", {})
+        cached = cache.get(source.slug)
+
+        if cached is not None:
+            cached_count = len(cached[1])
+
         return PeanutGalleryResult(
             day=day,
             image_path=image_path,
             image_url=self._public_url_for(image_path),
             date_text=day.strftime("%b %d, %Y"),
-            queue_size=len(self._archive_files(source)),
+            queue_size=cached_count,
             slug=source.slug,
         )
 
