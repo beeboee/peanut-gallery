@@ -96,23 +96,23 @@ if (PeanutGalleryCard && !PeanutGalleryCard.__curvedMenuPatched) {
       }
 
       .menu-item-open {
-        right: 51px;
+        right: 102px;
         bottom: -4px;
       }
 
       .menu-item-lock {
-        right: 91px;
-        bottom: 28px;
+        right: 72px;
+        bottom: 30px;
       }
 
       .menu-item-shuffle {
-        right: 79px;
-        bottom: 80px;
+        right: 36px;
+        bottom: 64px;
       }
 
       .menu-item-date {
-        right: 32px;
-        bottom: 111px;
+        right: 0;
+        bottom: 92px;
       }
 
       .menu:not([open]) .menu-arc {
