@@ -126,29 +126,29 @@ class PeanutGalleryClient:
         return self.cache_dir / f"peanuts_{day:%Y-%m-%d}.jpg"
 
     def _archive_files(self, source: GoComicsSource) -> list[Path]:
-    root = self.archive_root / source.slug
-    if not root.exists():
-        return []
+        root = self.archive_root / source.slug
+        if not root.exists():
+            return []
 
-    cache_key = source.slug
-    now = time.monotonic()
-    cache = getattr(self, "_archive_file_cache", {})
+        cache_key = source.slug
+        now = time.monotonic()
+        cache = getattr(self, "_archive_file_cache", {})
 
-    cached = cache.get(cache_key)
-    if cached is not None:
-        cached_at, files = cached
-        if now - cached_at < 60:
-            return files
+        cached = cache.get(cache_key)
+        if cached is not None:
+            cached_at, files = cached
+            if now - cached_at < 60:
+                return files
 
-    files = sorted(
-        path
-        for path in root.glob(f"*/*/{source.slug}_*.jpg")
-        if path.exists() and path.stat().st_size > MIN_IMAGE_BYTES
-    )
+        files = sorted(
+            path
+            for path in root.glob(f"*/*/{source.slug}_*.jpg")
+            if path.exists() and path.stat().st_size > MIN_IMAGE_BYTES
+        )
 
-    cache[cache_key] = (now, files)
-    self._archive_file_cache = cache
-    return files
+        cache[cache_key] = (now, files)
+        self._archive_file_cache = cache
+        return files
 
     def _day_from_archive_path(self, source: GoComicsSource, path: Path) -> date:
         prefix = f"{source.slug}_"
