@@ -1,3 +1,33 @@
+const PEANUT_GALLERY_LAST_FRESH_OPEN_DATE_KEY = "peanut_gallery_last_fresh_open_date";
+
+function peanutGalleryLocalDateIso() {
+  return new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
+}
+
+const peanutGalleryFreshOpenDate = peanutGalleryLocalDateIso();
+let peanutGalleryOpenedOnNewDay = false;
+
+try {
+  const previousOpenDate = window.localStorage.getItem(
+    PEANUT_GALLERY_LAST_FRESH_OPEN_DATE_KEY
+  );
+
+  peanutGalleryOpenedOnNewDay = Boolean(
+    previousOpenDate && previousOpenDate !== peanutGalleryFreshOpenDate
+  );
+
+  window.localStorage.setItem(
+    PEANUT_GALLERY_LAST_FRESH_OPEN_DATE_KEY,
+    peanutGalleryFreshOpenDate
+  );
+} catch {
+  // localStorage may be unavailable. In that case, skip the fresh-open rollover.
+}
+
+const peanutGalleryFreshOpenTodayHandled = new Set();
+
 class PeanutGalleryCard extends HTMLElement {
   setConfig(config) {
     this.config = {
@@ -39,6 +69,7 @@ class PeanutGalleryCard extends HTMLElement {
     this.actionInProgress = false;
     this.autoTodayTimer = null;
     this.didAutoLoadToday = false;
+    this.didFreshOpenToday = false;
     this.onTodayView = false;
 
     this.shuffleHistory = [];
@@ -76,9 +107,7 @@ class PeanutGalleryCard extends HTMLElement {
   }
 
   todayIso() {
-    return new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
-      .toISOString()
-      .slice(0, 10);
+    return peanutGalleryLocalDateIso();
   }
 
   sourceSlugFromUrl(sourceUrl = this.config.source_url) {
@@ -347,10 +376,32 @@ class PeanutGalleryCard extends HTMLElement {
     }
 
     this.recordPendingShuffle();
-    this.maybeAutoLoadToday(imageSrc);
+
+    const freshOpenTodayScheduled = this.maybeLoadTodayOnFreshOpen();
+    if (!freshOpenTodayScheduled) this.maybeAutoLoadToday(imageSrc);
+
     this.updateShuffleModeButton();
     this.updateSameDateButton();
     this.updateNavigationButtons();
+  }
+
+  maybeLoadTodayOnFreshOpen() {
+    if (!peanutGalleryOpenedOnNewDay || this.didFreshOpenToday || this.actionInProgress) {
+      return false;
+    }
+
+    const cardId = this.config.card_id || this.defaultCardId();
+
+    if (peanutGalleryFreshOpenTodayHandled.has(cardId)) {
+      this.didFreshOpenToday = true;
+      return false;
+    }
+
+    peanutGalleryFreshOpenTodayHandled.add(cardId);
+    this.didFreshOpenToday = true;
+
+    window.setTimeout(() => this.showToday(), 250);
+    return true;
   }
 
   maybeAutoLoadToday(imageSrc) {

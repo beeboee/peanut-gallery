@@ -14,6 +14,7 @@ This project is unofficial and is not affiliated with GoComics or any comic publ
 - **Archive shuffle** — randomize through saved comics.
 - **Date-lock shuffle** — shuffle through today's comics of yester-year.
 - **Time Machine** — choose a specific strip by date, limited to the comic's publish range.
+- **Fresh-open daily rollover** — if the app is freshly loaded on a different calendar day than the previous fresh load, each card returns to Today once. It does not switch at midnight while the app remains open.
 
 <details>
 <summary>Backend functions</summary>
