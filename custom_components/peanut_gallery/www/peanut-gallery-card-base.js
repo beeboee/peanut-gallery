@@ -60,6 +60,9 @@ class PeanutGalleryCard extends HTMLElement {
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
 
     this.controlsVisible = true;
+    this.readingControls = false;
+    this.readingActionSuppressed = false;
+    this.imageLoading = false;
     this.sameDateShuffle = this.loadSameDateShuffle();
     this.shuffleMode = this.loadShuffleMode();
 
@@ -77,6 +80,18 @@ class PeanutGalleryCard extends HTMLElement {
     this.pendingShuffleRecord = null;
 
     this.renderBase();
+  }
+
+  connectedCallback() {
+    if (this.readingResizeObserver && this.shadowRoot) {
+      this.readingResizeObserver.observe(this.$(".comic-scroll"));
+      this.readingResizeObserver.observe(this.$("#comic"));
+      this.updateReadingControls();
+    }
+  }
+
+  disconnectedCallback() {
+    this.readingResizeObserver?.disconnect();
   }
 
   static getStubConfig() {
@@ -312,6 +327,34 @@ class PeanutGalleryCard extends HTMLElement {
     }
   }
 
+  beginReading() {
+    if (this.actionInProgress) return;
+    this.controlsVisible = false;
+    this.readingControls = true;
+    this.readingActionSuppressed = false;
+    const menu = this.$("details.menu");
+    if (menu) menu.open = false;
+    this.resetComicScroll();
+    this.updateReadingControls();
+  }
+
+  updateReadingControls() {
+    const card = this.$("ha-card");
+    const scroll = this.$(".comic-scroll");
+    if (!card) return;
+    const overflow = scroll ? scroll.scrollWidth - scroll.clientWidth : 0;
+    const atEnd = Boolean(
+      scroll && !scroll.hidden && scroll.clientWidth > 0 &&
+      overflow > 2 && scroll.scrollLeft >= overflow - 2
+    );
+    card.classList.toggle("controls-hidden", !this.controlsVisible);
+    card.classList.toggle("reading-action-visible", Boolean(
+      this.readingControls && !this.controlsVisible &&
+      !this.readingActionSuppressed && !this.actionInProgress &&
+      !this.imageLoading && atEnd && this.getImageSrc()
+    ));
+  }
+
   resetComicScroll() {
     const scroll = this.$(".comic-scroll");
     if (!scroll) return;
@@ -319,6 +362,7 @@ class PeanutGalleryCard extends HTMLElement {
     const reset = () => {
       scroll.scrollLeft = 0;
       scroll.scrollTop = 0;
+      this.updateReadingControls();
     };
 
     reset();
@@ -383,6 +427,7 @@ class PeanutGalleryCard extends HTMLElement {
     this.updateShuffleModeButton();
     this.updateSameDateButton();
     this.updateNavigationButtons();
+    this.updateReadingControls();
   }
 
   maybeLoadTodayOnFreshOpen() {
@@ -430,11 +475,16 @@ class PeanutGalleryCard extends HTMLElement {
       return;
     }
 
+    this.imageLoading = true;
+    this.updateReadingControls();
     img.src = src;
     scroll.hidden = false;
     placeholder.hidden = true;
 
-    if (img.complete) this.adjustImageWidth(img);
+    if (img.complete && img.naturalWidth) {
+      this.imageLoading = false;
+      this.adjustImageWidth(img);
+    }
   }
 
   setImageLink(src) {
@@ -466,6 +516,7 @@ class PeanutGalleryCard extends HTMLElement {
     if (!img?.naturalWidth || !img?.naturalHeight) return;
 
     img.style.width = img.naturalWidth / img.naturalHeight > 2.2 ? "280%" : "100%";
+    this.updateReadingControls();
   }
 
   withTimeout(promise) {
@@ -501,7 +552,15 @@ class PeanutGalleryCard extends HTMLElement {
   toggleControls() {
     if (this.actionInProgress) return;
 
+    if (this.$("ha-card")?.classList.contains("reading-action-visible")) {
+      this.readingActionSuppressed = true;
+      this.updateReadingControls();
+      return;
+    }
     this.controlsVisible = !this.controlsVisible;
+    this.readingControls = false;
+    this.readingActionSuppressed = false;
+    this.updateReadingControls();
 
     const card = this.$("ha-card");
     if (card) card.classList.toggle("controls-hidden", !this.controlsVisible);
@@ -516,6 +575,7 @@ class PeanutGalleryCard extends HTMLElement {
     if (this.actionInProgress) return;
 
     this.actionInProgress = true;
+    this.updateReadingControls();
     this.shadowRoot.host.classList.add("busy");
 
     try {
@@ -525,6 +585,7 @@ class PeanutGalleryCard extends HTMLElement {
       this.actionInProgress = false;
       this.shadowRoot.host.classList.remove("busy");
       this.updateNavigationButtons();
+      this.updateReadingControls();
     }
   }
 
@@ -542,6 +603,8 @@ class PeanutGalleryCard extends HTMLElement {
   }
 
   showRandom() {
+    if (this.actionInProgress) return;
+    this.beginReading();
     this.onTodayView = false;
 
     const data = this.serviceData();
@@ -608,6 +671,8 @@ class PeanutGalleryCard extends HTMLElement {
   }
 
   showNext() {
+    if (this.actionInProgress) return;
+    this.beginReading();
     if (this.shuffleMode) {
       if (this.shuffleHistory.length > 0 && this.shuffleIndex < this.shuffleHistory.length - 1) {
         this.shuffleIndex += 1;
@@ -877,7 +942,7 @@ class PeanutGalleryCard extends HTMLElement {
 
         [hidden],
         ha-card.controls-hidden .previous,
-        ha-card.controls-hidden .next,
+        ha-card.controls-hidden:not(.reading-action-visible) .next,
         ha-card.controls-hidden .date-label,
         ha-card.controls-hidden .menu,
         ha-card.no-image .previous,
@@ -938,7 +1003,19 @@ class PeanutGalleryCard extends HTMLElement {
       </ha-card>
     `;
 
-    this.$("#comic").addEventListener("load", (event) => this.adjustImageWidth(event.currentTarget));
+    this.$(".comic-scroll").addEventListener("scroll", () => this.updateReadingControls(), { passive: true });
+    this.$("#comic").addEventListener("load", (event) => {
+      this.imageLoading = false;
+      this.adjustImageWidth(event.currentTarget);
+    });
+    this.$("#comic").addEventListener("error", () => {
+      this.imageLoading = true;
+      this.updateReadingControls();
+    });
+    this.readingResizeObserver?.disconnect();
+    this.readingResizeObserver = new ResizeObserver(() => this.updateReadingControls());
+    this.readingResizeObserver.observe(this.$(".comic-scroll"));
+    this.readingResizeObserver.observe(this.$("#comic"));
     this.$("#comic").addEventListener("click", (event) => {
       event.stopPropagation();
       this.toggleControls();
