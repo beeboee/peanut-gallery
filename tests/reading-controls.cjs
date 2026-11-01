@@ -13,6 +13,18 @@ function card(width=2800){
  c.controlsVisible=true;c.actionInProgress=false;c.config={};c.getImageSrc=()=> 'comic';
  return {c,scroll,flags};
 }
+const initial=card();
+initial.c.shadowRoot={};
+initial.c.renderBase=()=>{};
+initial.c.setConfig({card_id:'startup'});
+initial.c.updateReadingControls();
+assert.equal(initial.flags.has('controls-hidden'),true,'UI starts hidden');
+initial.c.toggleControls();
+assert.equal(initial.flags.has('controls-hidden'),false,'first tap shows UI');
+initial.c.updateReadingControls();
+assert.equal(initial.flags.has('controls-hidden'),false,'updates preserve the visible UI choice');
+initial.c.toggleControls();
+assert.equal(initial.flags.has('controls-hidden'),true,'second tap hides UI');
 const {c,scroll,flags}=card();
 c.runAction=()=>Promise.resolve();
 c.showNext();
