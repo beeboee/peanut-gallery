@@ -59,7 +59,7 @@ class PeanutGalleryCard extends HTMLElement {
 
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
 
-    this.controlsVisible = true;
+    this.controlsVisible = false;
     this.readingControls = false;
     this.readingActionSuppressed = false;
     this.imageLoading = false;
